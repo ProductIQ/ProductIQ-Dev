@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Request for Quotation — {{ supplier.company_name }}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    @page { size: A4; margin: 2cm; }
+    body { font-family: 'Inter', Arial, sans-serif; color: #1a1a2e; font-size: 10pt; line-height: 1.6; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 1.5em; border-bottom: 3px solid #6C63FF; margin-bottom: 2em; }
+    .logo { color: #6C63FF; font-size: 18pt; font-weight: 700; letter-spacing: 0.05em; }
+    .logo-sub { color: #888; font-size: 8pt; }
+    .date-ref { text-align: right; font-size: 9pt; color: #666; }
+    h1 { font-size: 16pt; color: #1a1a2e; margin: 1.5em 0 0.5em; }
+    h2 { font-size: 12pt; color: #6C63FF; margin: 1.5em 0 0.5em; border-bottom: 1px solid #EDE9FF; padding-bottom: 0.3em; }
+    p { margin: 0.5em 0; font-size: 10pt; color: #333; }
+    .address-block { background: #F4F4F8; border-radius: 6px; padding: 1em; margin: 1em 0; }
+    .address-block strong { display: block; font-size: 11pt; margin-bottom: 0.3em; }
+    table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+    th { background: #6C63FF; color: #fff; padding: 0.6em 0.8em; text-align: left; font-size: 9.5pt; }
+    td { padding: 0.55em 0.8em; border-bottom: 1px solid #E8E8EF; font-size: 9.5pt; }
+    tr:nth-child(even) td { background: #FAFAFA; }
+    .concept-highlight { background: #0D0D14; color: #fff; border-radius: 8px; padding: 1.2em; margin: 1em 0; }
+    .concept-highlight .name { color: #6C63FF; font-size: 14pt; font-weight: 700; }
+    .concept-highlight .tagline { color: #AAAABC; font-size: 10pt; }
+    .signature-block { margin-top: 3em; padding-top: 1em; border-top: 1px solid #E8E8EF; }
+    .footer { margin-top: 2em; font-size: 8pt; color: #999; text-align: center; border-top: 1px solid #eee; padding-top: 1em; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="logo">ProductIQ</div>
+    <div class="logo-sub">AI-Powered Product Intelligence</div>
+  </div>
+  <div class="date-ref">
+    <div><strong>Request for Quotation</strong></div>
+    <div>Date: {{ date or "April 2026" }}</div>
+    <div>Ref: RFQ-{{ concept.concept_name[:8] | upper | replace(' ', '') if concept.concept_name else 'PROD' }}-001</div>
+  </div>
+</div>
+
+<div class="address-block">
+  <strong>To: {{ supplier.company_name }}</strong>
+  {% if supplier.location %}<div>📍 {{ supplier.location }}</div>{% endif %}
+  {% if supplier.phone %}<div>📞 {{ supplier.phone }}</div>{% endif %}
+  {% if supplier.email %}<div>✉️ {{ supplier.email }}</div>{% endif %}
+  {% if supplier.profile_url %}<div>🔗 {{ supplier.profile_url }}</div>{% endif %}
+</div>
+
+<p>Dear {{ supplier.company_name }},</p>
+<p>We are developing a new consumer product and wish to explore manufacturing / supply partnerships. 
+   Please find below our requirements and kindly provide a detailed quotation at your earliest convenience.</p>
+
+<div class="concept-highlight">
+  <div class="name">{{ concept.concept_name or "New Product" }}</div>
+  <div class="tagline">{{ concept.tagline or "" }}</div>
+  {% if concept.usp %}
+  <div style="margin-top:0.8em; font-size:9pt; color:#CCC;">USP: {{ concept.usp }}</div>
+  {% endif %}
+</div>
+
+<h2>Product Requirements</h2>
+<table>
+  <thead><tr><th>Requirement</th><th>Details</th></tr></thead>
+  <tbody>
+    <tr><td>Product Category</td><td>{{ concept.gap_it_fills or (concept.concept_name + " (new product)") }}</td></tr>
+    <tr><td>Target Price Point</td>
+        <td>{% if concept.suggested_price_inr %}₹{{ "%.0f" | format(concept.suggested_price_inr) }} MRP (ex-factory: 30–40% of MRP){% else %}To be determined based on your quotation{% endif %}</td></tr>
+    <tr><td>Required Certifications</td><td>FSSAI Licence / Registration, ISO 22000, GMP (if applicable)</td></tr>
+    <tr><td>MOQ — Please quote for:</td><td>1,000 units &nbsp;|&nbsp; 5,000 units &nbsp;|&nbsp; 10,000 units</td></tr>
+    <tr><td>Packaging Requirement</td><td>Consumer-ready packaging with label space per Legal Metrology Rules 2011</td></tr>
+    <tr><td>Shelf Life Requirement</td><td>Minimum 12 months from date of manufacture</td></tr>
+    <tr><td>Delivery Terms</td><td>Ex-Works (your factory) — we will arrange freight</td></tr>
+    <tr><td>Lead Time</td><td>Please specify: sample lead time + production lead time per MOQ tier</td></tr>
+  </tbody>
+</table>
+
+{% if concept.key_features %}
+<h2>Key Product Features Required</h2>
+<ul style="list-style: none; padding: 0;">
+  {% for feat in concept.key_features[:7] %}
+  <li style="padding: 0.3em 0; border-bottom: 1px solid #F0F0F0;">
+    <span style="color:#6C63FF; font-weight:600;">›</span> {{ feat }}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<h2>Information Requested in Your Quotation</h2>
+<ol style="padding-left: 1.5em;">
+  <li>Unit price per MOQ tier (1K / 5K / 10K units)</li>
+  <li>Minimum Order Quantity you can accommodate</li>
+  <li>Sample cost and sample lead time</li>
+  <li>Production lead time after PO confirmation</li>
+  <li>List of certifications held (FSSAI number, ISO, etc.)</li>
+  <li>Facility location and capacity</li>
+  <li>Payment terms preferred</li>
+  <li>Any existing similar products you manufacture (for reference)</li>
+</ol>
+
+<div class="signature-block">
+  <p>We look forward to your prompt response. Please reply to this RFQ within <strong>5 business days</strong>.</p>
+  <br/>
+  <p><strong>ProductIQ Sourcing Team</strong></p>
+  <p>Product Intelligence Platform — productiq.in</p>
+  <p style="color:#999; font-size:8.5pt; margin-top:0.5em;">
+    This RFQ was AI-generated by ProductIQ. All product specifications are preliminary and subject to final design review.
+  </p>
+</div>
+
+<div class="footer">
+  ProductIQ — AI-Generated Request for Quotation &nbsp;|&nbsp; productiq.in &nbsp;|&nbsp; Confidential
+</div>
+
+</body>
+</html>

@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ProductIQ Report — {{ category }}</title>
+  <style>
+    /* ── Base ──────────────────────────────────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap');
+
+    :root {
+      --accent: #6C63FF;
+      --accent-light: #EDE9FF;
+      --dark: #0D0D14;
+      --text: #1A1A2E;
+      --muted: #6B6B80;
+      --border: #E8E8EF;
+      --bg-card: #F4F4F8;
+      --success: #00C896;
+      --warning: #FF8C42;
+      --danger: #FF4B6A;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 10pt;
+      background: #fff;
+    }
+
+    @page {
+      size: A4;
+      margin: 2cm 2.2cm;
+    }
+
+    .page-break { page-break-after: always; }
+    .no-break { page-break-inside: avoid; }
+
+    /* ── Typography ─────────────────────────────────────────── */
+    h1, h2, h3, h4 { font-weight: 600; line-height: 1.3; color: var(--text); }
+    h1 { font-size: 28pt; font-family: 'Playfair Display', serif; }
+    h2 { font-size: 16pt; border-bottom: 2.5px solid var(--accent); padding-bottom: 0.4em; margin: 2em 0 0.8em; }
+    h3 { font-size: 12pt; margin: 1.2em 0 0.4em; color: var(--accent); }
+    h4 { font-size: 10pt; margin: 0.8em 0 0.3em; }
+    p  { margin: 0.5em 0; color: var(--muted); }
+
+    /* ── Cover page ──────────────────────────────────────────── */
+    .cover {
+      background: var(--dark);
+      color: #fff;
+      min-height: 27cm;
+      padding: 3cm 2cm;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+    }
+    .cover::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 6px;
+      background: var(--accent);
+    }
+    .cover .brand { color: var(--accent); font-weight: 700; font-size: 14pt; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 2.5cm; }
+    .cover h1 { color: #fff; font-size: 36pt; margin-bottom: 0.5em; line-height: 1.15; }
+    .cover .subtitle { color: #AAAABC; font-size: 16pt; margin-bottom: 2cm; }
+    .cover .meta { color: #888899; font-size: 10pt; margin-top: auto; padding-top: 2cm; border-top: 1px solid #333; display: flex; justify-content: space-between; }
+    .cover .watermark-label { color: var(--accent); font-size: 9pt; font-weight: 500; border: 1px solid var(--accent); padding: 4px 10px; border-radius: 3px; display: inline-block; margin-top: 1.5cm; }
+
+    /* ── Watermark ──────────────────────────────────────────── */
+    body.watermarked::after {
+      content: "ProductIQ Free Report — productiq.in";
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-35deg);
+      font-size: 36pt;
+      font-weight: 700;
+      color: rgba(108, 99, 255, 0.06);
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── Stat grid ──────────────────────────────────────────── */
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 1.2em 0; }
+    .stat-card {
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 1em;
+      text-align: center;
+      border-top: 3px solid var(--accent);
+    }
+    .stat-value { font-size: 20pt; font-weight: 700; color: var(--accent); display: block; }
+    .stat-label { font-size: 8pt; color: var(--muted); margin-top: 0.3em; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* ── Cards ──────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 1.2em;
+      margin: 0.8em 0;
+      border-left: 4px solid var(--accent);
+    }
+    .card.pain { border-left-color: var(--danger); }
+    .card.praise { border-left-color: var(--success); }
+    .card.risk { border-left-color: var(--warning); }
+
+    .card-title { font-weight: 600; font-size: 11pt; color: var(--text); margin-bottom: 0.4em; }
+    .card-meta { font-size: 8.5pt; color: var(--muted); margin-bottom: 0.5em; }
+    .card-body { font-size: 9.5pt; color: #444455; }
+
+    /* ── Tags ──────────────────────────────────────────────── */
+    .tag {
+      display: inline-block;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-size: 7.5pt;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 3px;
+      margin: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tag.pain { background: #FFE8ED; color: var(--danger); }
+    .tag.praise { background: #E0FBF2; color: var(--success); }
+    .tag.trend { background: #FFF4E8; color: var(--warning); }
+
+    /* ── Tables ─────────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 9pt; }
+    thead tr { background: var(--accent); color: #fff; }
+    th { padding: 0.6em 0.8em; text-align: left; font-weight: 600; font-size: 9pt; }
+    td { padding: 0.55em 0.8em; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: #FAFAFA; }
+    tr:hover td { background: var(--accent-light); }
+
+    /* ── Score badge ─────────────────────────────────────────── */
+    .score-badge {
+      display: inline-block;
+      font-weight: 700;
+      font-size: 18pt;
+      color: var(--accent);
+      padding: 0.2em 0.5em;
+      border: 2px solid var(--accent);
+      border-radius: 6px;
+    }
+
+    /* ── Concept card ────────────────────────────────────────── */
+    .concept-card {
+      background: var(--dark);
+      color: #fff;
+      border-radius: 10px;
+      padding: 1.5em;
+      margin: 1em 0;
+    }
+    .concept-card h3 { color: var(--accent); font-size: 16pt; margin-bottom: 0.3em; }
+    .concept-card .tagline { color: #AAAABC; font-size: 11pt; margin-bottom: 1em; }
+    .concept-card .detail-row { display: flex; gap: 2em; margin: 0.5em 0; font-size: 9.5pt; }
+    .concept-card .detail-label { color: #888899; min-width: 6em; }
+    .concept-card .detail-val { color: #DDDDEE; }
+    .concept-card .features { margin-top: 0.8em; }
+    .concept-card .feat { color: #CCCCDD; font-size: 9pt; padding: 0.2em 0; }
+    .concept-card .feat::before { content: '› '; color: var(--accent); }
+
+    /* ── Separator ──────────────────────────────────────────── */
+    .separator { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
+
+    /* ── Footer ─────────────────────────────────────────────── */
+    .footer {
+      margin-top: 3em;
+      padding-top: 1em;
+      border-top: 1px solid var(--border);
+      font-size: 8pt;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* ── Section label ──────────────────────────────────────── */
+    .section-label {
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      margin-bottom: 0.3em;
+    }
+
+    /* ── Velocity indicator ─────────────────────────────────── */
+    .rising { color: var(--success); font-weight: 600; }
+    .declining { color: var(--danger); font-weight: 600; }
+    .stable { color: var(--muted); }
+  </style>
+</head>
+<body {% if watermarked %}class="watermarked"{% endif %}>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- COVER PAGE                                              -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="cover page-break">
+  <div class="brand">ProductIQ</div>
+  <h1>Product Intelligence<br/>Report</h1>
+  <div class="subtitle">
+    {{ category | title }}{% if brand_name %} · {{ brand_name }}{% endif %}
+  </div>
+  <div class="meta">
+    <span>AI-Generated Market Intelligence</span>
+    <span>{{ date or "April 2026" }}</span>
+    <span>productiq.in</span>
+  </div>
+  {% if watermarked %}
+  <div class="watermark-label">FREE REPORT — Upgrade for unbranded version</div>
+  {% endif %}
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- EXECUTIVE SUMMARY                                       -->
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>Executive Summary</h2>
+<div class="stat-grid">
+  <div class="stat-card">
+    <span class="stat-value">{{ products | length }}</span>
+    <span class="stat-label">Products Analysed</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-value">{{ review_clusters | length }}</span>
+    <span class="stat-label">Topic Clusters</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-value">{{ competitors | length }}</span>
+    <span class="stat-label">Competitors Mapped</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-value">{{ trends | length }}</span>
+    <span class="stat-label">Trends Tracked</span>
+  </div>
+</div>
+
+<div class="section-label">Top Insights</div>
+{% set top_insights = (insights or []) | sort(attribute='confidence_score', reverse=True) %}
+{% for insight in top_insights[:5] %}
+<div class="card no-break">
+  <div class="card-title">{{ loop.index }}. {{ insight.title }}</div>
+  <div class="card-meta">
+    <span class="tag">{{ insight.insight_type | replace('_', ' ') | title }}</span>
+    {% if insight.confidence_score %}
+    <span class="tag">{{ "%.0f%%" | format(insight.confidence_score * 100) }} confidence</span>
+    {% endif %}
+  </div>
+  <div class="card-body">{{ insight.body[:400] }}{% if insight.body | length > 400 %}…{% endif %}</div>
+</div>
+{% else %}
+<p class="card-body">No insights generated yet. Run the full pipeline to generate insights.</p>
+{% endfor %}
+
+<hr class="separator" />
+<div class="page-break"></div>
+
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- CONSUMER INTELLIGENCE                                   -->
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>Consumer Intelligence</h2>
+
+<div class="section-label">Review Topic Clusters</div>
+{% set pain_points = review_clusters | selectattr('topic_type', 'equalto', 'pain_point') | list %}
+{% set praises = review_clusters | selectattr('topic_type', 'equalto', 'praise') | list %}
+
+<h3>Top Pain Points</h3>
+{% for cluster in pain_points[:5] %}
+<div class="card pain no-break">
+  <div class="card-title">{{ cluster.topic_label }}</div>
+  <div class="card-meta">
+    {{ cluster.review_count or 0 }} reviews ·
+    Avg. sentiment: {{ "%.2f" | format(cluster.avg_sentiment or 0) }}
+    &nbsp;
+    {% for word in (cluster.representative_words or [])[:5] %}
+    <span class="tag pain">{{ word }}</span>
+    {% endfor %}
+  </div>
+  {% for sample in (cluster.sample_reviews or [])[:2] %}
+  <div class="card-body" style="margin-top:0.4em; font-style:italic;">"{{ sample[:200] }}"</div>
+  {% endfor %}
+</div>
+{% else %}
+<p>No pain points identified.</p>
+{% endfor %}
+
+<h3>What Customers Love</h3>
+{% for cluster in praises[:4] %}
+<div class="card praise no-break">
+  <div class="card-title">{{ cluster.topic_label }}</div>
+  <div class="card-meta">{{ cluster.review_count or 0 }} reviews</div>
+  {% for word in (cluster.representative_words or [])[:5] %}
+  <span class="tag praise">{{ word }}</span>
+  {% endfor %}
+</div>
+{% endfor %}
+
+<div class="page-break"></div>
+
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- COMPETITIVE LANDSCAPE                                   -->
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>Competitive Landscape</h2>
+{% if competitors %}
+<table>
+  <thead>
+    <tr>
+      <th>Brand</th>
+      <th>Price (₹)</th>
+      <th>Rating</th>
+      <th>Platform</th>
+      <th>Key Strength</th>
+      <th>Key Weakness</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for comp in competitors[:12] %}
+    <tr>
+      <td><strong>{{ comp.brand_name }}</strong></td>
+      <td>{% if comp.price_inr %}₹{{ "%.0f" | format(comp.price_inr) }}{% else %}—{% endif %}</td>
+      <td>{{ comp.rating or '—' }}</td>
+      <td>{{ comp.platform or '—' }}</td>
+      <td>{{ (comp.key_strengths or ['—'])[0] }}</td>
+      <td>{{ (comp.key_weaknesses or ['—'])[0] }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No competitor data available.</p>
+{% endif %}
+
+<div class="page-break"></div>
+
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- TREND ANALYSIS                                          -->
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>Trend Analysis</h2>
+{% if trends %}
+<table>
+  <thead>
+    <tr><th>Trend Keyword</th><th>Source</th><th>Velocity</th><th>Score</th><th>Related Topics</th></tr>
+  </thead>
+  <tbody>
+    {% for trend in trends | sort(attribute='trend_score', reverse=True) %}
+    <tr>
+      <td><strong>{{ trend.trend_keyword }}</strong></td>
+      <td>{{ trend.source or '—' }}</td>
+      <td>
+        <span class="{{ trend.velocity or 'stable' }}">
+          {{ '↑' if trend.velocity == 'rising' else ('↓' if trend.velocity == 'declining' else '→') }}
+          {{ (trend.velocity or 'stable') | title }}
+        </span>
+      </td>
+      <td>{{ "%.0f" | format(trend.trend_score or 0) }}</td>
+      <td>{{ (trend.related_topics or [])[:3] | join(', ') or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No trend data available.</p>
+{% endif %}
+
+<div class="page-break"></div>
+
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PRODUCT CONCEPTS                                        -->
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>Product Concepts</h2>
+{% if product_concepts %}
+{% for concept in product_concepts | sort(attribute='validation_score', reverse=True) %}
+<div class="concept-card no-break page-break">
+  <div class="section-label">Concept {{ loop.index }}</div>
+  <h3>{{ concept.concept_name }}</h3>
+  <div class="tagline">{{ concept.tagline }}</div>
+
+  <div class="detail-row">
+    <span class="detail-label">Target</span>
+    <span class="detail-val">{{ concept.target_persona }}</span>
+  </div>
+  <div class="detail-row">
+    <span class="detail-label">USP</span>
+    <span class="detail-val">{{ concept.usp }}</span>
+  </div>
+  <div class="detail-row">
+    <span class="detail-label">Price</span>
+    <span class="detail-val">
+      {% if concept.suggested_price_inr %}₹{{ "%.0f" | format(concept.suggested_price_inr) }}{% else %}TBD{% endif %}
+    </span>
+  </div>
+  <div class="detail-row">
+    <span class="detail-label">Gap Filled</span>
+    <span class="detail-val">{{ concept.gap_it_fills or '—' }}</span>
+  </div>
+  <div class="detail-row">
+    <span class="detail-label">Market Size</span>
+    <span class="detail-val">{{ concept.market_size_estimate or '—' }}</span>
+  </div>
+  <div class="detail-row">
+    <span class="detail-label">Validation</span>
+    <span class="detail-val">
+      <span class="score-badge">{{ concept.validation_score or 0 }}/100</span>
+    </span>
+  </div>
+
+  {% if concept.key_features %}
+  <div class="features" style="margin-top:1em;">
+    <div class="section-label">Key Features</div>
+    {% for feat in concept.key_features[:6] %}
+    <div class="feat">{{ feat }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if concept.risks %}
+  <div style="margin-top:1em;">
+    <div class="section-label">Risks</div>
+    {% for risk in concept.risks[:3] %}
+    <div style="color:#FF8C8C; font-size:9pt;">⚠ {{ risk }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if concept.name_ideas %}
+  <div style="margin-top:1em;">
+    <div class="section-label">Name Ideas</div>
+    {% for name in concept.name_ideas[:5] %}
+    <span class="tag">{{ name }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<p>No product concepts generated yet.</p>
+{% endif %}
+
+<div class="page-break"></div>
+
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- GO-TO-MARKET STRATEGY                                   -->
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>Go-To-Market Strategy</h2>
+{% set gtm = (gtm_plans or [{}])[0] %}
+{% if gtm %}
+
+{% set msg = gtm.messaging_framework or {} %}
+{% if msg.hero_message %}
+<div class="card">
+  <div class="card-title">Hero Message</div>
+  <div class="card-body" style="font-size:13pt; font-style:italic; color:var(--accent);">
+    "{{ msg.hero_message }}"
+  </div>
+</div>
+{% endif %}
+
+{% if gtm.launch_channels %}
+<h3>Launch Channels</h3>
+<ol>
+  {% for ch in gtm.launch_channels[:8] %}
+  <li style="margin:0.3em 0; font-size:9.5pt;">
+    {% if ch is mapping %}{{ ch.channel or ch }}{% else %}{{ ch }}{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{% endif %}
+
+{% if gtm.launch_timeline %}
+<h3>90-Day Timeline</h3>
+{% if gtm.launch_timeline is mapping %}
+{% for phase, items in gtm.launch_timeline.items() %}
+<h4>{{ phase | replace('_', ' ') | title }}</h4>
+{% if items is iterable and items is not string %}
+<ul>
+  {% for item in items %}
+  <li style="font-size:9pt; color:#555;">{{ item }}</li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>{{ items }}</p>
+{% endif %}
+{% endfor %}
+{% else %}
+<p>{{ gtm.launch_timeline }}</p>
+{% endif %}
+{% endif %}
+
+{% if gtm.budget_estimate %}
+<h3>Budget Estimate</h3>
+{% if gtm.budget_estimate is mapping %}
+<table>
+  <thead><tr><th>Scenario</th><th>Breakdown</th></tr></thead>
+  <tbody>
+    {% for scenario, detail in gtm.budget_estimate.items() %}
+    <tr><td><strong>{{ scenario | replace('_', ' ') | title }}</strong></td>
+        <td>{{ detail if detail is string else detail | tojson }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>{{ gtm.budget_estimate }}</p>
+{% endif %}
+{% endif %}
+
+{% else %}
+<p>Go-to-market plan not yet generated.</p>
+{% endif %}
+
+<div class="page-break"></div>
+
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- METHODOLOGY & APPENDIX                                  -->
+<!-- ══════════════════════════════════════════════════════ -->
+<h2>Methodology</h2>
+<p>This report was generated by ProductIQ's 8-agent AI pipeline, powered by Google Gemini and CrewAI.</p>
+
+<h3>Pipeline</h3>
+<table>
+  <thead><tr><th>#</th><th>Agent</th><th>Role</th><th>Model</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Web Scraper</td><td>Scrapes Amazon India &amp; Flipkart for product data</td><td>Gemini 2.0 Flash</td></tr>
+    <tr><td>2</td><td>Review Miner</td><td>BERTopic clustering + VADER sentiment on reviews</td><td>Gemini 2.0 Flash</td></tr>
+    <tr><td>3</td><td>Competitor Intel</td><td>Competitor landscape mapping via SerpAPI + web scraping</td><td>Gemini 2.0 Flash</td></tr>
+    <tr><td>4</td><td>Trend Spotter</td><td>Google Trends + Reddit trend velocity analysis</td><td>Gemini 2.0 Flash</td></tr>
+    <tr><td>5</td><td>Insight Synthesizer</td><td>Executive insight generation via RAG + 1M-token context</td><td>Gemini 1.5 Pro</td></tr>
+    <tr><td>6</td><td>Product Innovator</td><td>3 validated product concepts from identified gaps</td><td>Gemini 1.5 Pro</td></tr>
+    <tr><td>7</td><td>GTM Strategist</td><td>Full India-specific go-to-market plan</td><td>Gemini 2.0 Flash</td></tr>
+    <tr><td>8</td><td>Report Builder</td><td>PDF + PPTX assembly and Supabase upload</td><td>Gemini 1.5 Pro</td></tr>
+  </tbody>
+</table>
+
+<h3>Data Sources</h3>
+<ul>
+  <li>Amazon India — product listings, pricing, reviews</li>
+  <li>Flipkart — product listings, pricing</li>
+  <li>Google Trends — keyword velocity (India geography)</li>
+  <li>Reddit — consumer discussions (India-relevant subreddits)</li>
+  <li>Google Search via SerpAPI — competitor intelligence, news</li>
+</ul>
+
+<h3>Confidence Scores</h3>
+<p>Insight confidence scores (0–1) are calculated based on the strength and volume of supporting data evidence. Scores above 0.8 indicate strong multi-source corroboration.</p>
+
+{% if watermarked %}
+<div class="card" style="margin-top:2em; border-left-color: var(--accent);">
+  <div class="card-title">Upgrade to ProductIQ Pro</div>
+  <div class="card-body">
+    Remove the watermark, unlock all 12 agents (Sentiment Tracker, Price Optimizer, Supply Chain Scout, Compliance Guardian),
+    and get a fully branded PDF report. Plans from ₹999/report or ₹4,999/month.
+    Visit <strong>productiq.in</strong>
+  </div>
+</div>
+{% endif %}
+
+<div class="footer">
+  <span>Generated by ProductIQ — productiq.in</span>
+  <span>{{ date or "April 2026" }}</span>
+  <span>Confidential — For internal use only</span>
+</div>
+
+</body>
+</html>

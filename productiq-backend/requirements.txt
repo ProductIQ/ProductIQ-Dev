@@ -1,0 +1,74 @@
+## ProductIQ Backend — Python Requirements
+## Install: pip install -r requirements.txt
+
+# ── Core API Framework ───────────────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+sse-starlette
+pydantic
+pydantic-settings
+python-multipart
+
+# ── Database & Supabase ──────────────────────────────────────────────────────
+supabase
+psycopg2-binary
+sqlalchemy
+asyncpg
+
+# ── Celery & Redis ───────────────────────────────────────────────────────────
+celery[redis]
+redis
+flower
+
+# ── CrewAI & LLM ─────────────────────────────────────────────────────────────
+crewai
+crewai-tools
+google-generativeai
+
+# ── LlamaIndex RAG Stack ──────────────────────────────────────────────────────
+llama-index
+llama-index-core
+llama-index-llms-gemini
+llama-index-embeddings-gemini
+llama-index-vector-stores-supabase
+
+# ── Web Scraping ─────────────────────────────────────────────────────────────
+httpx
+httpx[http2]
+beautifulsoup4
+lxml
+fake-useragent
+playwright
+apify-client
+
+# ── NLP & ML ─────────────────────────────────────────────────────────────────
+spacy
+vaderSentiment
+bertopic
+scipy
+numpy
+scikit-learn
+
+# ── Search APIs ───────────────────────────────────────────────────────────────
+google-search-results
+pytrends
+praw
+
+# ── Report Generation ─────────────────────────────────────────────────────────
+weasyprint
+python-pptx
+jinja2
+
+# ── Payments ──────────────────────────────────────────────────────────────────
+razorpay
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+posthog
+
+# ── Observability & Logging ───────────────────────────────────────────────────
+structlog
+
+# ── Dev/Testing ───────────────────────────────────────────────────────────────
+pytest
+pytest-asyncio
+httpx
