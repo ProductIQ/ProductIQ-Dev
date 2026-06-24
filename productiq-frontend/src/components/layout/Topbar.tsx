@@ -1,13 +1,28 @@
 // src/components/layout/Topbar.tsx
 import { Bell, Slash, Search, Command } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { getInitials } from '@/lib/utils'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { getUnreadCount } from '@/lib/api'
+import { useRealtimeNotifications, useUnreadCount } from '@/hooks/useRealtime'
 
 export function Topbar() {
   const { user, profile } = useAuth()
   const navigate          = useNavigate()
   const location          = useLocation()
+
+  // ── Realtime: subscribe to notification inserts/updates ──
+  // This keeps the unread badge in sync without polling
+  useRealtimeNotifications()
+  useUnreadCount()
+
+  // ── Fetch unread count (refetches on realtime invalidation) ──
+  const { data: unreadCount = 0 } = useQuery<number>({
+    queryKey: ['unread-count'],
+    queryFn: getUnreadCount,
+    refetchInterval: 30_000, // fallback poll every 30s
+  })
 
   const paths = location.pathname.split('/').filter(Boolean)
   const formatRoute = (p: string) => p.charAt(0).toUpperCase() + p.slice(1).replace('-', ' ')
@@ -40,8 +55,8 @@ export function Topbar() {
       <div className="flex items-center gap-3">
         <div className="hidden md:flex items-center relative">
            <Search size={13} className="absolute left-3 text-[#A3A3A3]" />
-           <input 
-             placeholder="Search insights..." 
+           <input
+             placeholder="Search insights..."
              className="w-48 pl-8 pr-8 py-1.5 bg-[#F8F9FB] border border-[rgba(0,0,0,0.06)] rounded-full text-[12px] focus:outline-none focus:border-[#0A0A0A] focus:w-64 transition-all"
            />
            <div className="absolute right-2.5 flex items-center gap-0.5 text-[#A3A3A3] bg-white border border-[rgba(0,0,0,0.06)] px-1 rounded shadow-sm">
@@ -68,13 +83,22 @@ export function Topbar() {
           </button>
         )}
 
-        {/* Bell */}
+        {/* Bell — with live unread badge */}
         <button
+          onClick={() => navigate('/notifications')}
           className="relative w-8 h-8 rounded-full flex items-center justify-center text-[#6B6B6B] hover:text-[#0A0A0A] hover:bg-white/80 transition-all"
           style={{ border: '1px solid rgba(0,0,0,0.08)' }}
+          aria-label={`Notifications${unreadCount > 0 ? ` — ${unreadCount} unread` : ''}`}
         >
           <Bell size={14} strokeWidth={1.5} />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#C8F04A]" />
+          {unreadCount > 0 && (
+            <span
+              className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold text-[#0A0A0A]"
+              style={{ background: '#C8F04A' }}
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </button>
 
         {/* Avatar */}

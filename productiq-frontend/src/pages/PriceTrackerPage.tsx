@@ -1,28 +1,75 @@
 // src/pages/PriceTrackerPage.tsx
 import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Target, ArrowUp, ArrowDown, Minus, Activity, X,
   TrendingUp, SlidersHorizontal, ChevronUp, ChevronDown,
 } from 'lucide-react'
 import { PriceTrendChart } from '@/components/charts/PriceTrendChart'
+import { listReports, getProducts } from '@/lib/api'
+import type { AgentRun } from '@/types/agent'
+import type { Product } from '@/types/report'
 
-// ── Mock Data ─────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────
 type Platform = 'All' | 'Amazon' | 'Flipkart' | 'Meesho'
 
-const PRICE_DATA = [
-  { id: '1', name: 'MuscleBlaze Whey Protein 1kg',      brand: 'MuscleBlaze',    amazon: 2199, flipkart: 2149, meesho: 1999, mrp: 2799, rating: 4.2, reviews: 12840, change24h: -2.1 },
-  { id: '2', name: 'Optimum Nutrition Gold Standard',    brand: 'ON',             amazon: 4299, flipkart: 4399, meesho: null, mrp: 5499, rating: 4.6, reviews: 8421,  change24h: +0.8 },
-  { id: '3', name: 'MyProtein Impact Whey 1kg',          brand: 'MyProtein',      amazon: 1799, flipkart: 1749, meesho: 1699, mrp: 2499, rating: 4.0, reviews: 6523,  change24h: -0.5 },
-  { id: '4', name: 'Nakpro Gold Whey 1kg',               brand: 'Nakpro',         amazon: 1499, flipkart: 1459, meesho: 1399, mrp: 1999, rating: 3.8, reviews: 2100,  change24h: +1.5 },
-  { id: '5', name: 'HK Vitals Whey Protein 1kg',         brand: 'HK Vitals',      amazon: 1299, flipkart: 1249, meesho: 1199, mrp: 1799, rating: 3.7, reviews: 4210,  change24h: 0 },
-  { id: '6', name: 'Dymatize Elite Whey 907g',           brand: 'Dymatize',       amazon: 3299, flipkart: null, meesho: null, mrp: 4199, rating: 4.4, reviews: 3122,  change24h: -1.2 },
-  { id: '7', name: 'Scitron Advance Whey 1kg',           brand: 'Scitron',        amazon: 2599, flipkart: 2549, meesho: 2399, mrp: 3299, rating: 4.1, reviews: 5541,  change24h: +3.2 },
-]
+interface PriceRow {
+  id: string
+  name: string
+  brand: string
+  amazon: number | null
+  flipkart: number | null
+  meesho: number | null
+  mrp: number
+  rating: number
+  reviews: number
+  change24h: number
+}
 
-// Generate 90-day price history mock for a product
-function generateHistory(productId: string) {
-  const base = { '1': 2100, '2': 4200, '3': 1700, '4': 1450, '5': 1280, '6': 3350, '7': 2500 }[productId] ?? 2000
+// Map scraped products (one row per platform) into the aggregated
+// display format the table expects: one row per product with a column
+// per platform price.
+function mapProductsToRows(products: Product[]): PriceRow[] {
+  const groups = new Map<string, Product[]>()
+  for (const p of products) {
+    const key = (p.product_name ?? p.id).trim().toLowerCase()
+    if (!key) continue
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(p)
+  }
+  return Array.from(groups.entries()).map(([_, items], i) => {
+    const first = items[0]
+    const priceFor = (plat: string) =>
+      items.find(it => (it.platform ?? '').toLowerCase() === plat)?.price_inr ?? null
+    const amazon   = priceFor('amazon_india') ?? priceFor('amazon')
+    const flipkart = priceFor('flipkart')
+    const meesho   = priceFor('meesho')
+    const mrp = items.map(it => it.mrp_inr).filter((v): v is number => v != null)[0] ?? 0
+    const rating = items.map(it => it.rating).filter((v): v is number => v != null)[0] ?? 0
+    const reviews = items.reduce((s, it) => s + (it.review_count ?? 0), 0)
+    return {
+      id: first.id ?? String(i),
+      name: first.product_name ?? 'Unknown product',
+      brand: first.brand ?? '—',
+      amazon,
+      flipkart,
+      meesho,
+      mrp,
+      rating,
+      reviews,
+      // Single-scrape snapshot — no 24h delta available from the API.
+      change24h: 0,
+    }
+  })
+}
+
+// Fallback price-history generator — the products API returns a single
+// snapshot per product (no time series), so we synthesize a 30-day trend
+// around the current price to keep the detail chart meaningful.
+function generateHistory(row: PriceRow) {
+  const prices = [row.amazon, row.flipkart, row.meesho].filter(Boolean) as number[]
+  const base = prices.length ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 2000
   const now = Date.now()
   return Array.from({ length: 30 }, (_, i) => ({
     date: new Date(now - (29 - i) * 86400000).toISOString(),
@@ -39,10 +86,26 @@ type SortKey = 'name' | 'amazon' | 'flipkart' | 'rating' | 'change24h' | 'discou
 type SortDir = 'asc' | 'desc'
 
 export function PriceTrackerPage() {
+  const [runId, setRunId]       = useState<string>('')
   const [platform, setPlatform] = useState<Platform>('All')
   const [sortKey, setSortKey]   = useState<SortKey>('amazon')
   const [sortDir, setSortDir]   = useState<SortDir>('asc')
-  const [selected, setSelected] = useState<typeof PRICE_DATA[0] | null>(null)
+  const [selected, setSelected] = useState<PriceRow | null>(null)
+
+  // ── Fetch the list of runs for the selector ──
+  const { data: runs } = useQuery<AgentRun[]>({
+    queryKey: ['runs'],
+    queryFn:  listReports,
+  })
+
+  // ── Fetch products for the selected run ──
+  const { data: rawProducts, isLoading } = useQuery<Product[]>({
+    queryKey: ['products', runId],
+    queryFn:  () => getProducts(runId) as Promise<Product[]>,
+    enabled:  !!runId,
+  })
+
+  const rows = useMemo(() => mapProductsToRows(rawProducts ?? []), [rawProducts])
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -50,7 +113,7 @@ export function PriceTrackerPage() {
   }
 
   const sorted = useMemo(() => {
-    return [...PRICE_DATA].sort((a, b) => {
+    return [...rows].sort((a, b) => {
       let va: number, vb: number
       if (sortKey === 'name') {
         return sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
@@ -60,12 +123,12 @@ export function PriceTrackerPage() {
       else if (sortKey === 'rating')   { va = a.rating;   vb = b.rating }
       else if (sortKey === 'change24h') { va = a.change24h; vb = b.change24h }
       else {
-        va = Math.round(((a.mrp - (a.amazon ?? a.mrp)) / a.mrp) * 100)
-        vb = Math.round(((b.mrp - (b.amazon ?? b.mrp)) / b.mrp) * 100)
+        va = a.mrp ? Math.round(((a.mrp - (a.amazon ?? a.mrp)) / a.mrp) * 100) : 0
+        vb = b.mrp ? Math.round(((b.mrp - (b.amazon ?? b.mrp)) / b.mrp) * 100) : 0
       }
       return sortDir === 'asc' ? va - vb : vb - va
     })
-  }, [sortKey, sortDir])
+  }, [rows, sortKey, sortDir])
 
   function SortIcon({ k }: { k: SortKey }) {
     if (sortKey !== k) return <span className="opacity-20 text-[10px]">↕</span>
@@ -75,8 +138,18 @@ export function PriceTrackerPage() {
   }
 
   // Find optimal price
-  const allPrices = PRICE_DATA.flatMap(p => [p.amazon, p.flipkart, p.meesho].filter(Boolean) as number[])
-  const optimalPrice = Math.round(allPrices.reduce((a, b) => a + b, 0) / allPrices.length * 1.08)
+  const allPrices = rows.flatMap(p => [p.amazon, p.flipkart, p.meesho].filter(Boolean) as number[])
+  const cheapest  = allPrices.length ? Math.min(...allPrices) : 0
+  const premium   = allPrices.length ? Math.max(...allPrices) : 0
+  const avgPrice  = allPrices.length ? Math.round(allPrices.reduce((a, b) => a + b, 0) / allPrices.length) : 0
+  const optimalPrice = allPrices.length ? Math.round(avgPrice * 1.08) : 0
+
+  const marketPosition = optimalPrice && avgPrice
+    ? (optimalPrice > avgPrice * 1.1 ? 'Premium' : optimalPrice < avgPrice * 0.9 ? 'Value' : 'Mid-range')
+    : '—'
+
+  const runLabel = (r?: AgentRun) =>
+    r ? `${r.product_category}${r.brand_name ? ` · ${r.brand_name}` : ''}` : ''
 
   return (
     <div className="max-w-[1080px] mx-auto pb-12">
@@ -113,6 +186,57 @@ export function PriceTrackerPage() {
         </motion.div>
       </div>
 
+      {/* ── Run selector ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] px-5 py-3 mb-6 flex items-center gap-3"
+      >
+        <span className="text-[11px] font-bold uppercase tracking-wider text-[#A3A3A3]">Report</span>
+        <select
+          value={runId}
+          onChange={e => { setRunId(e.target.value); setSelected(null) }}
+          className="flex-1 text-[13px] font-semibold text-[#0A0A0A] bg-transparent outline-none cursor-pointer"
+        >
+          <option value="">Select a report…</option>
+          {runs?.map(r => (
+            <option key={r.id} value={r.id}>
+              {runLabel(r)}
+            </option>
+          ))}
+        </select>
+      </motion.div>
+
+      {/* ── Empty state — no run selected ── */}
+      {!runId && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] px-5 py-16 text-center"
+        >
+          <Target size={20} className="text-[#C8C8C8] mx-auto mb-3" />
+          <p className="text-[13px] text-[#A3A3A3] leading-relaxed">
+            Select a report to view tracked product prices.
+          </p>
+        </motion.div>
+      )}
+
+      {/* ── Loading state ── */}
+      {runId && isLoading && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] px-5 py-16 text-center"
+        >
+          <div className="h-5 w-5 mx-auto mb-3 rounded-full border-2 border-[#E5E5E5] border-t-[#0A0A0A] animate-spin" />
+          <p className="text-[13px] text-[#A3A3A3]">Loading product prices…</p>
+        </motion.div>
+      )}
+
+      {/* ── Main content ── */}
+      {runId && !isLoading && (
       <div className="grid lg:grid-cols-3 gap-6">
 
         {/* ── Main Table ── */}
@@ -125,7 +249,7 @@ export function PriceTrackerPage() {
           >
             <div className="px-6 py-4 border-b border-[rgba(0,0,0,0.06)] flex items-center justify-between">
               <h3 className="text-[14px] font-bold text-[#0A0A0A]">Market Price Map</h3>
-              <span className="text-[11px] text-[#A3A3A3]">Updated 2h ago</span>
+              <span className="text-[11px] text-[#A3A3A3]">{rows.length} products</span>
             </div>
 
             <div className="overflow-x-auto">
@@ -152,7 +276,7 @@ export function PriceTrackerPage() {
                 </thead>
                 <tbody>
                   {sorted.map((row, i) => {
-                    const discPct = row.amazon ? Math.round(((row.mrp - row.amazon) / row.mrp) * 100) : 0
+                    const discPct = row.mrp && row.amazon ? Math.round(((row.mrp - row.amazon) / row.mrp) * 100) : 0
                     const isActive = selected?.id === row.id
                     return (
                       <motion.tr
@@ -234,7 +358,7 @@ export function PriceTrackerPage() {
                 </div>
 
                 <PriceTrendChart
-                  data={generateHistory(selected.id)}
+                  data={generateHistory(selected)}
                   optimalPrice={optimalPrice}
                   height={220}
                 />
@@ -306,10 +430,10 @@ export function PriceTrackerPage() {
             </h3>
             <div className="space-y-3">
               {[
-                { label: 'Cheapest competitor',  value: formatINR(1299), color: '#22C55E' },
-                { label: 'Category avg price',   value: formatINR(2314), color: '#0A0A0A' },
-                { label: 'Premium ceiling',      value: formatINR(4399), color: '#A3A3A3' },
-                { label: 'Your market position', value: 'Mid-range',     color: '#F59E0B' },
+                { label: 'Cheapest competitor',  value: allPrices.length ? formatINR(cheapest) : '—', color: '#22C55E' },
+                { label: 'Category avg price',   value: allPrices.length ? formatINR(avgPrice) : '—', color: '#0A0A0A' },
+                { label: 'Premium ceiling',      value: allPrices.length ? formatINR(premium) : '—', color: '#A3A3A3' },
+                { label: 'Your market position', value: marketPosition,                                 color: '#F59E0B' },
               ].map(item => (
                 <div key={item.label} className="flex items-center justify-between text-[13px]">
                   <span className="text-[#A3A3A3]">{item.label}</span>
@@ -320,6 +444,7 @@ export function PriceTrackerPage() {
           </motion.div>
         </div>
       </div>
+      )}
     </div>
   )
 }

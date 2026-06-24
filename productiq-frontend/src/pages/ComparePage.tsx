@@ -3,13 +3,16 @@
 // Design: matches Dashboard — white cards, dark header strip, typographic rows.
 
 import React, { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowRight, TrendingUp, TrendingDown, ChevronDown,
   Plus, Minus, ArrowLeftRight,
 } from 'lucide-react'
-import { MOCK_DELTAS, type RunDelta } from '@/lib/mockData'
+import { compareRuns, listReports } from '@/lib/api'
+import type { RunDelta } from '@/lib/mockData'
+import type { AgentRun } from '@/types/agent'
 
 // ── Section card — same white card pattern ───────────────────────────────────
 function Section({
@@ -97,7 +100,27 @@ function VelocityRow({ trend, before, after, delta }: { trend: string; before: n
 // ── Main page ────────────────────────────────────────────────────────────────
 export function ComparePage() {
   const navigate = useNavigate()
-  const delta    = MOCK_DELTAS[0]
+  const [baseRunId, setBaseRunId]       = useState<string>('')
+  const [compareRunId, setCompareRunId] = useState<string>('')
+
+  // ── Fetch list of runs for the dropdowns ──
+  const { data: runs } = useQuery<AgentRun[]>({
+    queryKey: ['runs'],
+    queryFn:  listReports,
+  })
+
+  // ── Fetch comparison data only when both runs are selected ──
+  const { data: delta, isLoading } = useQuery<RunDelta>({
+    queryKey:  ['compare', baseRunId, compareRunId],
+    queryFn:   () => compareRuns(baseRunId, compareRunId),
+    enabled:   !!baseRunId && !!compareRunId && baseRunId !== compareRunId,
+  })
+
+  const bothSelected = !!baseRunId && !!compareRunId && baseRunId !== compareRunId
+
+  // ── Helper to render a run label in the dropdown ──
+  const runLabel = (r?: AgentRun) =>
+    r ? `${r.product_category}${r.brand_name ? ` · ${r.brand_name}` : ''}` : ''
 
   return (
     <div className="max-w-[860px] mx-auto pb-12">
@@ -133,15 +156,70 @@ export function ComparePage() {
         <div className="flex items-center gap-0 divide-x divide-white/5">
           <div className="flex-1 px-5 py-4">
             <p className="text-[9px] font-bold uppercase tracking-wider text-white/30 mb-1">Base</p>
-            <p className="text-[14px] font-semibold text-white">{delta.baseName}</p>
+            <select
+              value={baseRunId}
+              onChange={e => setBaseRunId(e.target.value)}
+              className="w-full bg-transparent text-[14px] font-semibold text-white outline-none cursor-pointer"
+              style={{ appearance: 'none' }}
+            >
+              <option value="" className="text-[#0A0A0A]">Select base run…</option>
+              {runs?.map(r => (
+                <option key={r.id} value={r.id} className="text-[#0A0A0A]">
+                  {runLabel(r)}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex-1 px-5 py-4">
             <p className="text-[9px] font-bold uppercase tracking-wider text-white/30 mb-1">Compare</p>
-            <p className="text-[14px] font-semibold text-white">{delta.compareName}</p>
+            <select
+              value={compareRunId}
+              onChange={e => setCompareRunId(e.target.value)}
+              className="w-full bg-transparent text-[14px] font-semibold text-white outline-none cursor-pointer"
+              style={{ appearance: 'none' }}
+            >
+              <option value="" className="text-[#0A0A0A]">Select compare run…</option>
+              {runs?.map(r => (
+                <option key={r.id} value={r.id} className="text-[#0A0A0A]">
+                  {runLabel(r)}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </motion.div>
 
+      {/* ── Empty state — no runs selected ── */}
+      {!bothSelected && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] px-5 py-16 text-center"
+        >
+          <ArrowLeftRight size={20} className="text-[#C8C8C8] mx-auto mb-3" />
+          <p className="text-[13px] text-[#A3A3A3] leading-relaxed">
+            Select two reports to compare their insights, competitors, and sentiment changes.
+          </p>
+        </motion.div>
+      )}
+
+      {/* ── Loading state ── */}
+      {bothSelected && isLoading && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] px-5 py-16 text-center"
+        >
+          <div className="h-5 w-5 mx-auto mb-3 rounded-full border-2 border-[#E5E5E5] border-t-[#0A0A0A] animate-spin" />
+          <p className="text-[13px] text-[#A3A3A3]">Comparing runs…</p>
+        </motion.div>
+      )}
+
+      {/* ── Comparison results ── */}
+      {bothSelected && delta && (
+        <>
       {/* ── AI Summary — inline, not a banner ── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -296,7 +374,7 @@ export function ComparePage() {
         className="flex gap-3"
       >
         <button
-          onClick={() => navigate('/reports/mock-run-001')}
+          onClick={() => navigate(`/reports/${baseRunId}`)}
           className="btn btn-black flex-1 flex items-center justify-center gap-2"
         >
           View base report <ArrowRight size={13} />
@@ -308,6 +386,8 @@ export function ComparePage() {
           Validate a concept
         </button>
       </motion.div>
+        </>
+      )}
     </div>
   )
 }

@@ -1,6 +1,13 @@
 """
 ProductIQ — NLP Tools
-Sentiment analysis, BERTopic clustering, spaCy NER, price elasticity modelling.
+Sentiment analysis (Gemini-based), BERTopic clustering, spaCy NER, price elasticity modelling.
+
+D3: SentimentAnalysisTool now uses Gemini instead of VADER for:
+  - Better accuracy on Indian English reviews (VADER has 38% error rate)
+  - Sarcasm and context detection
+  - Aspect-based sentiment (e.g., "delivery was fast but quality is poor")
+
+Falls back to VADER if Gemini is unavailable (e.g., no API key).
 """
 
 import json
@@ -14,19 +21,14 @@ logger = structlog.get_logger()
 class SentimentAnalysisTool(BaseTool):
     name: str = "Sentiment Analyser"
     description: str = (
-        "Analyses sentiment of a list of text reviews using VADER. "
+        "Analyses sentiment of a list of text reviews using Gemini LLM. "
         "Returns score (-1 to 1) and label (positive/negative/neutral) for each review, "
-        "plus an aggregate summary. "
+        "plus an aggregate summary with aspect-based insights. "
         "Input: reviews_json — JSON string of list of review dicts, each with a 'body' field."
     )
 
     def _run(self, reviews_json: str) -> str:
         try:
-            from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-            import numpy as np
-
-            analyzer = SentimentIntensityAnalyzer()
-
             # Handle both string and dict input
             if isinstance(reviews_json, str):
                 data = json.loads(reviews_json)
@@ -35,49 +37,180 @@ class SentimentAnalysisTool(BaseTool):
 
             reviews = data if isinstance(data, list) else data.get("reviews", data.get("enriched_reviews", []))
 
-            results = []
-            for rev in reviews:
-                text = rev.get("body", "") or rev.get("text", "")
-                if not text:
-                    continue
-                scores = analyzer.polarity_scores(text)
-                compound = scores["compound"]
-                label = "positive" if compound >= 0.05 else ("negative" if compound <= -0.05 else "neutral")
-                results.append({
-                    **rev,
-                    "sentiment_score": round(compound, 3),
-                    "sentiment_label": label,
-                    "vader_scores": {
-                        "pos": round(scores["pos"], 3),
-                        "neg": round(scores["neg"], 3),
-                        "neu": round(scores["neu"], 3),
-                    }
-                })
+            if not reviews:
+                return json.dumps({"enriched_reviews": [], "summary": {}})
 
-            pos = sum(1 for r in results if r.get("sentiment_label") == "positive")
-            neg = sum(1 for r in results if r.get("sentiment_label") == "negative")
-            neu = len(results) - pos - neg
-            total = len(results)
-
-            avg_score = round(float(np.mean([r["sentiment_score"] for r in results])), 3) if results else 0.0
-
-            return json.dumps({
-                "enriched_reviews": results,
-                "summary": {
-                    "total": total,
-                    "positive": pos,
-                    "negative": neg,
-                    "neutral": neu,
-                    "positive_pct": round(pos / total * 100, 1) if total else 0,
-                    "negative_pct": round(neg / total * 100, 1) if total else 0,
-                    "neutral_pct": round(neu / total * 100, 1) if total else 0,
-                    "avg_score": avg_score,
-                }
-            })
+            # Try Gemini-based sentiment first, fall back to VADER
+            try:
+                return self._analyze_with_gemini(reviews)
+            except Exception as gemini_err:
+                logger.warning("Gemini sentiment failed, falling back to VADER",
+                               error=str(gemini_err)[:120])
+                return self._analyze_with_vader(reviews)
 
         except Exception as e:
             logger.error("Sentiment analysis error", error=str(e))
             return json.dumps({"error": str(e), "enriched_reviews": [], "summary": {}})
+
+    def _analyze_with_gemini(self, reviews: list) -> str:
+        """Use Gemini to analyze sentiment in batches of 10 reviews."""
+        from llm_utils import call_with_retry
+        import google.generativeai as genai
+        from config import settings
+
+        # Configure Gemini with the primary key
+        api_key = settings.GEMINI_API_KEY
+        if not api_key or api_key == "your_gemini_api_key_here":
+            raise RuntimeError("No Gemini API key configured")
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+
+        results = []
+        batch_size = 10
+
+        for i in range(0, len(reviews), batch_size):
+            batch = reviews[i:i + batch_size]
+            batch_results = self._analyze_batch_gemini(model, batch, call_with_retry)
+            results.extend(batch_results)
+
+        # Compute aggregate summary
+        pos = sum(1 for r in results if r.get("sentiment_label") == "positive")
+        neg = sum(1 for r in results if r.get("sentiment_label") == "negative")
+        neu = len(results) - pos - neg
+        total = len(results)
+
+        avg_score = round(
+            sum(r.get("sentiment_score", 0) for r in results) / total, 3
+        ) if total else 0.0
+
+        return json.dumps({
+            "enriched_reviews": results,
+            "summary": {
+                "total": total,
+                "positive": pos,
+                "negative": neg,
+                "neutral": neu,
+                "positive_pct": round(pos / total * 100, 1) if total else 0,
+                "negative_pct": round(neg / total * 100, 1) if total else 0,
+                "neutral_pct": round(neu / total * 100, 1) if total else 0,
+                "avg_score": avg_score,
+                "method": "gemini",
+            }
+        })
+
+    def _analyze_batch_gemini(self, model, batch: list, retry_fn) -> list:
+        """Analyze a batch of reviews with a single Gemini call."""
+        # Build the prompt
+        reviews_text = []
+        for idx, rev in enumerate(batch):
+            text = (rev.get("body", "") or rev.get("text", ""))[:500]
+            reviews_text.append(f"[{idx}] {text}")
+
+        prompt = f"""Analyze the sentiment of each review below. For each review, return a JSON array where each element has:
+  - "index": the review number
+  - "sentiment_score": a float from -1.0 (very negative) to 1.0 (very positive)
+  - "sentiment_label": "positive", "negative", or "neutral"
+  - "aspects": list of aspect strings mentioned (e.g., ["delivery", "quality", "price"])
+
+Reviews:
+{chr(10).join(reviews_text)}
+
+Return ONLY a JSON array, no markdown formatting."""
+
+        try:
+            response = retry_fn(model.generate_content, prompt)
+            response_text = response.text.strip()
+
+            # Strip markdown codeblock if present
+            if response_text.startswith("```"):
+                response_text = response_text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+            sentiments = json.loads(response_text)
+
+            # Map back to original reviews
+            results = []
+            for idx, rev in enumerate(batch):
+                sent = next((s for s in sentiments if s.get("index") == idx), None)
+                if sent:
+                    results.append({
+                        **rev,
+                        "sentiment_score": round(float(sent.get("sentiment_score", 0)), 3),
+                        "sentiment_label": sent.get("sentiment_label", "neutral"),
+                        "aspects": sent.get("aspects", []),
+                    })
+                else:
+                    results.append({
+                        **rev,
+                        "sentiment_score": 0.0,
+                        "sentiment_label": "neutral",
+                        "aspects": [],
+                    })
+
+            return results
+
+        except Exception as batch_err:
+            logger.warning("Gemini batch failed, using VADER for this batch",
+                           error=str(batch_err)[:100])
+            return self._analyze_batch_vader(batch)
+
+    def _analyze_with_vader(self, reviews: list) -> str:
+        """VADER fallback — original implementation."""
+        from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+        import numpy as np
+
+        analyzer = SentimentIntensityAnalyzer()
+        results = self._analyze_batch_vader(reviews, analyzer)
+
+        pos = sum(1 for r in results if r.get("sentiment_label") == "positive")
+        neg = sum(1 for r in results if r.get("sentiment_label") == "negative")
+        neu = len(results) - pos - neg
+        total = len(results)
+
+        avg_score = round(
+            float(np.mean([r["sentiment_score"] for r in results])), 3
+        ) if results else 0.0
+
+        return json.dumps({
+            "enriched_reviews": results,
+            "summary": {
+                "total": total,
+                "positive": pos,
+                "negative": neg,
+                "neutral": neu,
+                "positive_pct": round(pos / total * 100, 1) if total else 0,
+                "negative_pct": round(neg / total * 100, 1) if total else 0,
+                "neutral_pct": round(neu / total * 100, 1) if total else 0,
+                "avg_score": avg_score,
+                "method": "vader",
+            }
+        })
+
+    def _analyze_batch_vader(self, reviews: list, analyzer=None) -> list:
+        """Analyze a batch of reviews with VADER."""
+        if analyzer is None:
+            from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+            analyzer = SentimentIntensityAnalyzer()
+
+        results = []
+        for rev in reviews:
+            text = rev.get("body", "") or rev.get("text", "")
+            if not text:
+                continue
+            scores = analyzer.polarity_scores(text)
+            compound = scores["compound"]
+            label = "positive" if compound >= 0.05 else ("negative" if compound <= -0.05 else "neutral")
+            results.append({
+                **rev,
+                "sentiment_score": round(compound, 3),
+                "sentiment_label": label,
+                "vader_scores": {
+                    "pos": round(scores["pos"], 3),
+                    "neg": round(scores["neg"], 3),
+                    "neu": round(scores["neu"], 3),
+                }
+            })
+        return results
 
 
 class BERTopicClusterTool(BaseTool):

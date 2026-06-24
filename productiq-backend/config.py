@@ -101,6 +101,11 @@ class Settings(BaseSettings):
     POSTHOG_API_KEY: Optional[str] = None
     POSTHOG_HOST: str = "https://app.posthog.com"
 
+    # ── Error Tracking (Sentry) ───────────────────────────────────────────────
+    SENTRY_DSN: Optional[str] = None
+    SENTRY_ENVIRONMENT: str = "development"
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+
     # ── Optional: Neo4j ───────────────────────────────────────────────────────
     NEO4J_URI: Optional[str] = None
     NEO4J_USERNAME: Optional[str] = None
@@ -173,7 +178,24 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+
+    # ── Production safety guard ───────────────────────────────────────────────
+    # Crash early rather than silently running with an insecure default secret.
+    _INSECURE_SECRETS = {
+        "change-me-in-production-32-char-min",
+        "replace-with-32-char-random-secret-key-here",
+        "change_me",
+        "secret",
+        "",
+    }
+    if s.is_production and s.SECRET_KEY.strip() in _INSECURE_SECRETS:
+        raise RuntimeError(
+            "FATAL: SECRET_KEY is set to an insecure default but APP_ENV=production. "
+            "Generate a real 32+ character random secret and set it in your .env file."
+        )
+
+    return s
 
 
 settings = get_settings()

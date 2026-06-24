@@ -6,105 +6,13 @@ import {
   ArrowLeft, Download, FileText, Presentation,
   TrendingUp, TrendingDown, CheckCircle2,
   AlertTriangle, Copy, Check, BarChart3, Target,
-  Brain,
+  Brain, Loader2,
 } from 'lucide-react'
 import { Tabs } from '@/components/ui/Tabs'
 import { TrendVelocityChart } from '@/components/charts/TrendVelocityChart'
 import { ConsumerIntelTab } from '@/components/report/ConsumerIntelTab'
-
-// ── Mock report data ───────────────────────────────────────────────
-const MOCK_RUN = {
-  id: 'mock-run-001',
-  product_category: 'Whey Protein',
-  brand_name: 'YourBrand',
-  target_market: 'India',
-  status: 'completed',
-  created_at: new Date(Date.now() - 24 * 3600000).toISOString(),
-  duration_seconds: 612,
-}
-
-const MOCK_INSIGHTS = [
-  { id: '1', insight_type: 'market_gap',             confidence_score: 0.87, title: 'Sugar-free segment is massively underserved', body: 'Only 2 of 18 tracked SKUs offer a certified sugar-free formulation. 34% of negative reviews across the category mention sweetness as a pain point, yet brand positioning hasn\'t responded.' },
-  { id: '2', insight_type: 'consumer_need',           confidence_score: 0.81, title: 'Digestibility is the #1 purchase driver post-trial', body: '62% of 3-star reviews that eventually converted to 5-star after a second purchase cited "stomach adjusted after a week." An onboarding guide addressing this could directly improve retention.' },
-  { id: '3', insight_type: 'competitive_advantage',  confidence_score: 0.74, title: 'Transparent ingredient sourcing is a whitespace', body: 'No top-10 brand in the category displays third-party lab results on their product page. A verified QR code linked to lab reports could create meaningful brand differentiation.' },
-  { id: '4', insight_type: 'trend_opportunity',       confidence_score: 0.69, title: 'Collagen-protein blends trending +180% on Google', body: 'Cross-category interest in beauty-from-within supplements is surging. A collagen + whey hybrid SKU could capture both the fitness and beauty audiences with one product.' },
-  { id: '5', insight_type: 'risk',                    confidence_score: 0.78, title: 'Regulatory risk: FSSAI label compliance gap', body: 'Agent 12 flagged that 3 of your planned claims ("boosts immunity," "promotes fat loss") require substantiated clinical evidence under FSSAI\'s draft nutrient content claims regulation.' },
-]
-
-const MOCK_COMPETITORS = [
-  { name: 'MuscleBlaze Biozyme',  price: 2499, rating: 4.3, reviews: 14200, strength: 'Patented enzyme blend',    gap: 'No transparent lab reports' },
-  { name: 'Optimum Nutrition Gold', price: 4299, rating: 4.6, reviews: 9800, strength: 'Global brand trust',      gap: 'Premium-only pricing locks out Tier 2' },
-  { name: 'MyProtein Impact',     price: 1799, rating: 4.0, reviews: 7200,  strength: 'Price leadership',         gap: 'Weak India-specific positioning' },
-  { name: 'Nakpro Performance',   price: 1499, rating: 3.8, reviews: 2400,  strength: 'Budget entry point',       gap: 'Taste scores consistently low' },
-  { name: 'HK Vitals Whey',       price: 1299, rating: 3.7, reviews: 4100,  strength: 'Health influencer backing', gap: 'Limited SKU depth' },
-]
-
-const MOCK_TRENDS_CHART_KEYS = ['whey protein', 'plant protein', 'collagen protein']
-const MOCK_TRENDS_DATA = Array.from({ length: 12 }, (_, i) => ({
-  date: new Date(Date.now() - (11 - i) * 30 * 86400000).toISOString(),
-  'whey protein':    60 + Math.round(Math.sin(i * 0.7) * 18),
-  'plant protein':   30 + Math.round(i * 2.5 + Math.sin(i * 0.4) * 8),
-  'collagen protein': 10 + Math.round(i * 4 + Math.sin(i * 1.1) * 6),
-}))
-
-const MOCK_TREND_CARDS = [
-  { keyword: 'Collagen protein blend',   velocity: 'rising',   peak: 'Sep 2026',  pct: '+180%' },
-  { keyword: 'Sugar-free whey',          velocity: 'rising',   peak: 'Jul 2026',  pct: '+124%' },
-  { keyword: 'Vegan protein India',      velocity: 'rising',   peak: 'Jun 2026',  pct: '+89%' },
-  { keyword: 'Whey concentrate 80%',     velocity: 'stable',   peak: null,         pct: '+12%' },
-  { keyword: 'Mass gainer students',     velocity: 'declining', peak: null,        pct: '-18%' },
-  { keyword: 'Whey isolate women',       velocity: 'rising',   peak: 'Aug 2026',  pct: '+67%' },
-]
-
-const MOCK_CONCEPTS = [
-  {
-    rank: 1,
-    name: 'ClearWhey Sugar-Free',
-    tagline: '"The first whey protein your dietitian will approve."',
-    persona: '25–40, health-conscious working professionals',
-    price: 2299,
-    validation: 83,
-    usp: 'Zero added sugar, third-party lab tested, FSSAI compliant, transparent QR code on every pack.',
-    gap: 'The sugar-free certified protein segment is 0% of top-10 SKUs despite 34% of reviews citing sweetness as a pain point.',
-    features: ['Certified zero sugar', 'Lab QR code on pack', 'FSSAI compliant claims', '28g protein per scoop', 'Digestive enzyme blend'],
-    risks: ['Sugar-free claims require FSSAI certification, 8–12 week lead time', 'Premium pricing may limit Tier 2 adoption'],
-    names: ['ClearWhey', 'PureForm', 'ZeroSweet Protein', 'Verified Whey'],
-  },
-  {
-    rank: 2,
-    name: 'CollaWhey Glow+',
-    tagline: '"Protein that works from your muscles to your skin."',
-    persona: '22–35, fitness + beauty conscious women',
-    price: 2799,
-    validation: 71,
-    usp: 'Whey protein + marine collagen blend targeting both fitness and beauty-from-within trends simultaneously.',
-    gap: 'No brand has bridged the fitness + beauty segments in protein. Google Trends shows +180% for "collagen protein" YoY.',
-    features: ['25g whey + 5g marine collagen', 'Biotin + Vitamin C co-factors', 'Rose water flavour', 'Recyclable packaging'],
-    risks: ['Marine collagen import cost increases margins', 'Beauty claims require different regulatory pathway'],
-    names: ['CollaWhey', 'GlowProtein', 'FitGlow', 'SkinFuel'],
-  },
-  {
-    rank: 3,
-    name: 'StudyGains Student Pack',
-    tagline: '"More protein, less spend. Made for hostels."',
-    persona: '18–24, college students, Tier 2 India',
-    price: 899,
-    validation: 58,
-    usp: 'Single-serving sachets at ₹29/serving targeting price-sensitive student segment, sold via college canteens and Meesho.',
-    gap: 'Budget segment has no D2C brand with quality positioning. Student review sentiment shows willingness to pay slightly more for trustworthy brand.',
-    features: ['Single-serve sachets 30g', '22g protein per sachet', 'Meesho + Zepto distribution', 'Hostel-friendly no-shaker mix'],
-    risks: ['Low margin per unit — requires volume', 'Distribution in Tier 2 colleges is operationally complex'],
-    names: ['StudyGains', 'HostelWhey', 'CampusFuel', 'NutriBag'],
-  },
-]
-
-const GTM_CHANNELS = [
-  { rank: 1, channel: 'Amazon PPC (Sponsored Products)', roi: 'Highest',  reason: '14,200 reviews on #1 competitor — capture existing demand directly' },
-  { rank: 2, channel: 'Health/fitness micro-influencers (50K–200K)',  roi: 'High',    reason: '47% of purchase decisions attributed to influencer recommendations in category' },
-  { rank: 3, channel: 'Meesho social commerce',   roi: 'High',    reason: 'Fastest-growing protein channel in Tier 2 cities; low competition from established brands' },
-  { rank: 4, channel: 'Reddit r/fitness + r/IndianFoodHacks', roi: 'Medium', reason: '312 organic brand mentions found; community is brand-discovery-ready' },
-  { rank: 5, channel: 'Google Search (non-brand)',  roi: 'Medium',  reason: '"Sugar-free protein India" has 8,100 monthly searches with zero ads from competitors' },
-]
+import { useReport } from '@/hooks/useReport'
+import type { Insight, Competitor, ProductConcept, ReviewCluster, GTMPlan } from '@/types/report'
 
 // ── Helper components ─────────────────────────────────────────────
 const INSIGHT_COLORS: Record<string, string> = {
@@ -123,7 +31,7 @@ const INSIGHT_LABELS: Record<string, string> = {
   risk: 'Risk Flag',
 }
 
-function InsightCard({ insight }: { insight: typeof MOCK_INSIGHTS[0] }) {
+function InsightCard({ insight }: { insight: Insight }) {
   const [expanded, setExpanded] = useState(false)
   const color = INSIGHT_COLORS[insight.insight_type] ?? '#A3A3A3'
   const label = INSIGHT_LABELS[insight.insight_type] ?? insight.insight_type
@@ -145,7 +53,7 @@ function InsightCard({ insight }: { insight: typeof MOCK_INSIGHTS[0] }) {
               {label}
             </span>
             <span className="text-[10px] font-mono text-[#C8C8C8] flex-shrink-0">
-              {Math.round(insight.confidence_score * 100)}% confidence
+              {insight.confidence_score != null ? `${Math.round(insight.confidence_score * 100)}% confidence` : ''}
             </span>
           </div>
           <p className="text-[13.5px] font-semibold text-[#0A0A0A] leading-snug">{insight.title}</p>
@@ -168,7 +76,38 @@ function InsightCard({ insight }: { insight: typeof MOCK_INSIGHTS[0] }) {
   )
 }
 
-function ConceptCard({ concept }: { concept: typeof MOCK_CONCEPTS[0] }) {
+// Adapter type: maps real ProductConcept to the shape ConceptCard expects
+interface ConceptDisplay {
+  rank: number
+  name: string
+  tagline: string
+  persona: string
+  price: number
+  validation: number
+  usp: string
+  gap: string
+  features: string[]
+  risks: string[]
+  names: string[]
+}
+
+function adaptConcept(c: ProductConcept, index: number): ConceptDisplay {
+  return {
+    rank: index + 1,
+    name: c.concept_name,
+    tagline: c.tagline ?? '',
+    persona: c.target_persona ?? '',
+    price: c.suggested_price_inr ?? 0,
+    validation: c.validation_score ?? 0,
+    usp: c.usp ?? '',
+    gap: c.gap_it_fills ?? '',
+    features: c.key_features ?? [],
+    risks: c.risks ?? [],
+    names: c.name_ideas ?? [],
+  }
+}
+
+function ConceptCard({ concept }: { concept: ConceptDisplay }) {
   const [copied, setCopied] = useState<string | null>(null)
 
   async function copyName(name: string) {
@@ -278,15 +217,22 @@ function ConceptCard({ concept }: { concept: typeof MOCK_CONCEPTS[0] }) {
 }
 
 // ── Tab panels ─────────────────────────────────────────────────────
-function OverviewTab() {
+function OverviewTab({ insights, competitors, clusters }: {
+  insights: Insight[]
+  competitors: Competitor[]
+  clusters: ReviewCluster[]
+}) {
+  const topInsight = insights.find(i => i.insight_type === 'market_gap') ?? insights[0]
+  const totalReviews = clusters.reduce((sum, c) => sum + (c.review_count ?? 0), 0)
+
   return (
     <div className="space-y-6">
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Products analysed', value: '847',     icon: BarChart3 },
-          { label: 'Reviews mined',     value: '12,340',  icon: Brain },
-          { label: 'Competitors mapped', value: '18',     icon: Target },
+          { label: 'Products analysed', value: clusters.length ? String(clusters.length) : '—',     icon: BarChart3 },
+          { label: 'Reviews mined',     value: totalReviews ? totalReviews.toLocaleString('en-IN') : '—',  icon: Brain },
+          { label: 'Competitors mapped', value: competitors.length ? String(competitors.length) : '—',     icon: Target },
         ].map(s => {
           const Icon = s.icon
           return (
@@ -300,25 +246,32 @@ function OverviewTab() {
       </div>
 
       {/* Top opportunity callout */}
+      {topInsight && (
       <div className="rounded-[20px] p-6 text-white" style={{ background: '#0F0F0F' }}>
         <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-white/30 mb-2">Top Opportunity</p>
-        <p className="text-[17px] font-bold text-white mb-2 leading-snug">Sugar-free certified whey is a ₹80+ crore untapped gap</p>
+        <p className="text-[17px] font-bold text-white mb-2 leading-snug">{topInsight.title}</p>
         <p className="text-[13px] text-white/50 leading-relaxed">
-          34% of negative reviews mention sweetness, 0 of top-10 SKUs are certified sugar-free, and #1 search intent phrase has no sponsored ads from competitors.
+          {topInsight.body}
         </p>
         <div
           className="mt-4 h-0.5 w-8 rounded-full"
           style={{ background: '#C8F04A' }}
         />
       </div>
+      )}
 
       {/* Insights list */}
       <div>
         <h3 className="text-[11px] font-bold text-[#0A0A0A] uppercase tracking-[0.1em] mb-4">
           Agent Insights
         </h3>
+        {insights.length === 0 ? (
+          <div className="text-center py-10 text-[#A3A3A3] text-[13px]">
+            No insights generated yet for this report.
+          </div>
+        ) : (
         <div className="space-y-2.5">
-          {MOCK_INSIGHTS.map((insight, i) => (
+          {insights.map((insight, i) => (
             <motion.div
               key={insight.id}
               initial={{ opacity: 0, y: 6 }}
@@ -329,13 +282,30 @@ function OverviewTab() {
             </motion.div>
           ))}
         </div>
+        )}
       </div>
     </div>
   )
 }
 
-function CompetitorTab() {
+function CompetitorTab({ competitors }: { competitors: Competitor[] }) {
   const [expanded, setExpanded] = useState<string | null>(null)
+
+  if (competitors.length === 0) {
+    return (
+      <div className="text-center py-10 text-[#A3A3A3] text-[13px]">
+        No competitor data available for this report yet.
+      </div>
+    )
+  }
+
+  // Compute price/rating ranges for positioning matrix
+  const prices = competitors.map(c => c.price_inr ?? 0).filter(p => p > 0)
+  const ratings = competitors.map(c => c.rating ?? 0).filter(r => r > 0)
+  const minPrice = Math.min(...prices, 1)
+  const maxPrice = Math.max(...prices, minPrice + 1)
+  const minRating = Math.min(...ratings, 3)
+  const maxRating = Math.max(...ratings, minRating + 0.5)
 
   return (
     <div className="space-y-5">
@@ -352,27 +322,27 @@ function CompetitorTab() {
               </tr>
             </thead>
             <tbody>
-              {MOCK_COMPETITORS.map((comp, i) => (
+              {competitors.map((comp, i) => (
                 <>
                   <tr
-                    key={comp.name}
-                    onClick={() => setExpanded(expanded === comp.name ? null : comp.name)}
+                    key={comp.id}
+                    onClick={() => setExpanded(expanded === comp.id ? null : comp.id)}
                     className="border-b border-[rgba(0,0,0,0.04)] cursor-pointer hover:bg-[#F8F9FB] transition-colors"
                   >
                     <td className="px-6 py-3.5">
-                      <div className="text-[13px] font-semibold text-[#0A0A0A]">{comp.name}</div>
-                      <div className="text-[11px] text-[#A3A3A3]">{comp.reviews.toLocaleString()} reviews</div>
+                      <div className="text-[13px] font-semibold text-[#0A0A0A]">{comp.brand_name}</div>
+                      <div className="text-[11px] text-[#A3A3A3]">{(comp.review_count ?? 0).toLocaleString()} reviews</div>
                     </td>
-                    <td className="px-6 py-3.5 text-[13px] font-mono text-[#0A0A0A] text-right">₹{comp.price.toLocaleString('en-IN')}</td>
+                    <td className="px-6 py-3.5 text-[13px] font-mono text-[#0A0A0A] text-right">₹{(comp.price_inr ?? 0).toLocaleString('en-IN')}</td>
                     <td className="px-6 py-3.5 text-[13px] text-[#6B6B6B]">
-                      ⭐ {comp.rating}
+                      ⭐ {comp.rating ?? '—'}
                     </td>
-                    <td className="px-6 py-3.5 text-[12px] text-[#6B6B6B] hidden md:table-cell max-w-[160px]">{comp.strength}</td>
-                    <td className="px-6 py-3.5 text-[12px] text-[#EF4444] hidden md:table-cell max-w-[160px]">{comp.gap}</td>
+                    <td className="px-6 py-3.5 text-[12px] text-[#6B6B6B] hidden md:table-cell max-w-[160px]">{comp.key_strengths?.[0] ?? '—'}</td>
+                    <td className="px-6 py-3.5 text-[12px] text-[#EF4444] hidden md:table-cell max-w-[160px]">{comp.key_weaknesses?.[0] ?? '—'}</td>
                   </tr>
                   <AnimatePresence>
-                    {expanded === comp.name && (
-                      <tr key={`${comp.name}-expanded`}>
+                    {expanded === comp.id && (
+                      <tr key={`${comp.id}-expanded`}>
                         <td colSpan={5} className="p-0">
                           <motion.div
                             initial={{ height: 0, opacity: 0 }}
@@ -384,12 +354,12 @@ function CompetitorTab() {
                             <div className="px-6 py-4 bg-[#F8F9FB] border-b border-[rgba(0,0,0,0.05)]">
                               <div className="grid md:grid-cols-2 gap-4">
                                 <div>
-                                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#A3A3A3] mb-1.5">Key Strength</p>
-                                  <p className="text-[13px] text-[#444]">{comp.strength}</p>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#A3A3A3] mb-1.5">Key Strengths</p>
+                                  <p className="text-[13px] text-[#444]">{comp.key_strengths?.join(', ') || '—'}</p>
                                 </div>
                                 <div>
-                                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#EF4444] mb-1.5">Exploitable Gap</p>
-                                  <p className="text-[13px] text-[#444]">{comp.gap}</p>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#EF4444] mb-1.5">Exploitable Gaps</p>
+                                  <p className="text-[13px] text-[#444]">{comp.key_weaknesses?.join(', ') || '—'}</p>
                                 </div>
                               </div>
                             </div>
@@ -413,54 +383,78 @@ function CompetitorTab() {
           <span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-[#A3A3A3] uppercase tracking-wider">← Price Low / High →</span>
           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-[#A3A3A3] uppercase tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg) translateY(50%)' }}>← Rating Low / High →</span>
           {/* Plotted competitors */}
-          {MOCK_COMPETITORS.map(c => (
-            <div
-              key={c.name}
-              className="absolute flex flex-col items-center"
-              style={{
-                left: `${15 + ((c.price - 1200) / 3200) * 70}%`,
-                top: `${85 - ((c.rating - 3.5) / 1.2) * 65}%`,
-                transform: 'translate(-50%, -50%)',
-              }}
-            >
-              <div className="w-3 h-3 rounded-full bg-[#0A0A0A] border-2 border-white shadow-sm" />
-              <span className="text-[9px] font-semibold text-[#6B6B6B] mt-0.5 whitespace-nowrap">{c.name.split(' ')[0]}</span>
-            </div>
-          ))}
-          {/* Your brand */}
-          <div
-            className="absolute flex flex-col items-center"
-            style={{ left: '52%', top: '30%', transform: 'translate(-50%, -50%)' }}
-          >
-            <div className="w-3.5 h-3.5 rounded-full bg-[#C8F04A] border-2 border-[#0A0A0A] shadow-sm" />
-            <span className="text-[9px] font-bold text-[#0A0A0A] mt-0.5">YourBrand</span>
-          </div>
+          {competitors.map(c => {
+            const price = c.price_inr ?? 0
+            const rating = c.rating ?? 0
+            if (price === 0 || rating === 0) return null
+            const leftPct = 15 + ((price - minPrice) / (maxPrice - minPrice)) * 70
+            const topPct = 85 - ((rating - minRating) / (maxRating - minRating)) * 65
+            return (
+              <div
+                key={c.id}
+                className="absolute flex flex-col items-center"
+                style={{
+                  left: `${leftPct}%`,
+                  top: `${topPct}%`,
+                  transform: 'translate(-50%, -50%)',
+                }}
+              >
+                <div className="w-3 h-3 rounded-full bg-[#0A0A0A] border-2 border-white shadow-sm" />
+                <span className="text-[9px] font-semibold text-[#6B6B6B] mt-0.5 whitespace-nowrap">{c.brand_name.split(' ')[0]}</span>
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
   )
 }
 
-function TrendsTab() {
+function TrendsTab({ trends }: { trends: unknown[] }) {
+  // Map real trend data to display format
+  const trendCards = (trends as Array<{
+    trend_keyword?: string
+    velocity?: string
+    trend_score?: number | null
+    peak_predicted_at?: string | null
+    detected_at?: string
+  }>).map(t => ({
+    keyword: t.trend_keyword ?? 'Unknown',
+    velocity: t.velocity ?? 'stable',
+    pct: t.trend_score != null ? `${t.trend_score > 0 ? '+' : ''}${t.trend_score}%` : '0%',
+    peak: t.peak_predicted_at ? new Date(t.peak_predicted_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : null,
+  }))
+
+  // Build chart data from trends (if available, otherwise empty)
+  const chartKeys = trendCards.slice(0, 3).map(t => t.keyword)
+  const chartData: Record<string, unknown>[] = []
+
   return (
     <div className="space-y-6">
       {/* Chart */}
+      {chartData.length > 0 && chartKeys.length > 0 && (
       <div className="bg-white rounded-[20px] p-6 border border-[rgba(0,0,0,0.07)]">
         <h3 className="text-[14px] font-bold text-[#0A0A0A] mb-1">12-Month Trend Velocity</h3>
-        <p className="text-[12px] text-[#A3A3A3] mb-5">Google Trends interest score (0–100) for protein sub-categories</p>
+        <p className="text-[12px] text-[#A3A3A3] mb-5">Google Trends interest score (0–100) for top trend keywords</p>
         <TrendVelocityChart
-          data={MOCK_TRENDS_DATA}
+          data={chartData}
           mode="trend"
-          keys={MOCK_TRENDS_CHART_KEYS}
+          keys={chartKeys}
           height={220}
         />
       </div>
+      )}
 
       {/* Trend cards */}
       <div>
         <h3 className="text-[13px] font-bold text-[#0A0A0A] uppercase tracking-wider mb-3">Detected Trend Signals</h3>
+        {trendCards.length === 0 ? (
+          <div className="text-center py-10 text-[#A3A3A3] text-[13px]">
+            No trend signals detected yet for this report.
+          </div>
+        ) : (
         <div className="grid sm:grid-cols-2 gap-4">
-          {MOCK_TREND_CARDS.map((t, i) => (
+          {trendCards.map((t, i) => (
             <motion.div
               key={t.keyword}
               initial={{ opacity: 0, y: 6 }}
@@ -495,55 +489,83 @@ function TrendsTab() {
             </motion.div>
           ))}
         </div>
+        )}
       </div>
     </div>
   )
 }
 
-function ConceptsTab() {
+function ConceptsTab({ concepts }: { concepts: ProductConcept[] }) {
+  if (concepts.length === 0) {
+    return (
+      <div className="text-center py-10 text-[#A3A3A3] text-[13px]">
+        No product concepts generated yet for this report.
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {MOCK_CONCEPTS.map((concept, i) => (
+      {concepts.map((concept, i) => (
         <motion.div
-          key={concept.rank}
+          key={concept.id}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08 * i }}
         >
-          <ConceptCard concept={concept} />
+          <ConceptCard concept={adaptConcept(concept, i)} />
         </motion.div>
       ))}
     </div>
   )
 }
 
-function GTMTab() {
+function GTMTab({ gtmPlans }: { gtmPlans: GTMPlan[] }) {
+  // Extract channels from real GTM plan data
+  const plan = gtmPlans[0]
+  const channels = (plan?.launch_channels ?? []) as string[]
+  const timeline = (plan?.launch_timeline ?? {}) as Record<string, unknown>
+  const budget = (plan?.budget_estimate ?? {}) as Record<string, unknown>
+
+  // Default timeline phases (used when no real timeline data)
+  const defaultTimeline = [
+    { week: 'Week 1–2',  phase: 'Foundation',  color: '#C8F04A', items: ['Finalise FSSAI claim list', 'Lock flavour formula', 'Brief creative agency'] },
+    { week: 'Week 3–4',  phase: 'Pre-launch',  color: '#F59E0B', items: ['Amazon listing optimization + A+ content', 'Seed 10 micro-influencers (gifting)', 'Meesho catalogue setup'] },
+    { week: 'Week 5–8',  phase: 'Launch',      color: '#22C55E', items: ['Amazon PPC campaign go-live (₹50K budget)', 'Influencer posts go live', 'Reddit organic seeding'] },
+    { week: 'Week 9–12', phase: 'Optimise',    color: '#0EA5E9', items: ['Review ACOS and pause underperforming ad groups', 'Expand to 3 new influencers based on results', 'Begin Flipkart listing'] },
+  ]
+
+  // Try to extract timeline phases from real data, fall back to defaults
+  const timelinePhases = Array.isArray(timeline.phases) ? timeline.phases : defaultTimeline
+
+  if (gtmPlans.length === 0) {
+    return (
+      <div className="text-center py-10 text-[#A3A3A3] text-[13px]">
+        No GTM plan generated yet for this report.
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Launch channels */}
+      {channels.length > 0 && (
       <div className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] overflow-hidden">
         <div className="px-6 py-4 border-b border-[rgba(0,0,0,0.05)]">
           <h3 className="text-[14px] font-bold text-[#0A0A0A]">Recommended Launch Channels</h3>
         </div>
-        {GTM_CHANNELS.map((ch, i) => (
-          <div key={ch.rank} className={`flex items-start gap-4 px-6 py-4 ${i < GTM_CHANNELS.length - 1 ? 'border-b border-[rgba(0,0,0,0.04)]' : ''}`}>
+        {channels.map((ch, i) => (
+          <div key={i} className={`flex items-start gap-4 px-6 py-4 ${i < channels.length - 1 ? 'border-b border-[rgba(0,0,0,0.04)]' : ''}`}>
             <div className="w-7 h-7 rounded-full bg-[#0F0F0F] text-[#C8F04A] flex items-center justify-center text-[12px] font-bold flex-shrink-0">
-              {ch.rank}
+              {i + 1}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-[13px] font-semibold text-[#0A0A0A]">{ch.channel}</p>
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0 ${
-                  ch.roi === 'Highest' ? 'bg-[#0F0F0F] text-[#C8F04A]' :
-                  ch.roi === 'High'    ? 'bg-[#dcfce7] text-[#16A34A]' :
-                  'bg-[rgba(0,0,0,0.07)] text-[#A3A3A3]'
-                }`}>{ch.roi} ROI</span>
-              </div>
-              <p className="text-[12px] text-[#6B6B6B] mt-1 leading-relaxed">{ch.reason}</p>
+              <p className="text-[13px] font-semibold text-[#0A0A0A]">{ch}</p>
             </div>
           </div>
         ))}
       </div>
+      )}
 
       {/* 90-day timeline */}
       <div className="bg-white rounded-[20px] p-6 border border-[rgba(0,0,0,0.07)]">
@@ -552,79 +574,58 @@ function GTMTab() {
           {/* Timeline line */}
           <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-[rgba(0,0,0,0.08)]" />
           <div className="space-y-6">
-            {[
-              { week: 'Week 1–2',  phase: 'Foundation',  color: '#C8F04A', items: ['Finalise FSSAI claim list', 'Lock flavour formula', 'Brief creative agency'] },
-              { week: 'Week 3–4',  phase: 'Pre-launch',  color: '#F59E0B', items: ['Amazon listing optimization + A+ content', 'Seed 10 micro-influencers (gifting)', 'Meesho catalogue setup'] },
-              { week: 'Week 5–8',  phase: 'Launch',      color: '#22C55E', items: ['Amazon PPC campaign go-live (₹50K budget)', 'Influencer posts go live', 'Reddit organic seeding'] },
-              { week: 'Week 9–12', phase: 'Optimise',    color: '#0EA5E9', items: ['Review ACOS and pause underperforming ad groups', 'Expand to 3 new influencers based on results', 'Begin Flipkart listing'] },
-            ].map(phase => (
-              <div key={phase.week} className="flex gap-5 pl-10 relative">
+            {timelinePhases.map((phase: any, i: number) => {
+              const colors = ['#C8F04A', '#F59E0B', '#22C55E', '#0EA5E9']
+              const color = phase.color ?? colors[i % colors.length]
+              const week = phase.week ?? `Phase ${i + 1}`
+              const phaseName = phase.phase ?? phase.name ?? ''
+              const items = phase.items ?? phase.tasks ?? []
+              return (
+              <div key={week} className="flex gap-5 pl-10 relative">
                 <div
                   className="absolute left-2.5 top-2 w-3 h-3 rounded-full border-2 border-white -translate-x-1/2 flex-shrink-0"
-                  style={{ background: phase.color }}
+                  style={{ background: color }}
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#A3A3A3]">{phase.week}</span>
-                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: phase.color + '28', color: phase.color }}>
-                      {phase.phase}
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#A3A3A3]">{week}</span>
+                    {phaseName && (
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: color + '28', color: color }}>
+                      {phaseName}
                     </span>
+                    )}
                   </div>
                   <ul className="space-y-1">
-                    {phase.items.map(item => (
+                    {items.map((item: string) => (
                       <li key={item} className="flex items-center gap-2 text-[13px] text-[#444]">
-                        <CheckCircle2 size={11} style={{ color: phase.color }} className="flex-shrink-0" />
+                        <CheckCircle2 size={11} style={{ color }} className="flex-shrink-0" />
                         {item}
                       </li>
                     ))}
                   </ul>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </div>
 
       {/* Budget overview */}
+      {budget && Object.keys(budget).length > 0 && (
       <div className="rounded-[20px] p-6 text-white" style={{ background: '#0F0F0F' }}>
         <h3 className="text-[13px] font-semibold mb-4 flex items-center gap-2">
           <Target size={13} className="text-[#C8F04A]" /> 90-Day Budget Estimate
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'Amazon PPC', amount: '₹1.5L', pct: 37 },
-            { label: 'Influencers', amount: '₹1.2L', pct: 30 },
-            { label: 'Creative', amount: '₹60K', pct: 15 },
-            { label: 'Other', amount: '₹72K', pct: 18 },
-          ].map(b => (
-            <div key={b.label}>
-              <div className="text-[11px] text-white/50 mb-1">{b.label}</div>
-              <div className="text-[20px] font-bold text-white mb-1.5">{b.amount}</div>
-              <div className="h-1 bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-[#C8F04A] rounded-full" style={{ width: `${b.pct}%` }} />
-              </div>
-              <div className="text-[10px] text-white/40 mt-1">{b.pct}% of total</div>
-            </div>
-          ))}
-        </div>
         <div className="border-t border-white/10 mt-5 pt-4 flex items-center justify-between">
           <span className="text-[13px] text-white/60">Total 90-day budget</span>
-          <span className="text-[20px] font-bold text-[#C8F04A]">₹4.02L</span>
+          <span className="text-[20px] font-bold text-[#C8F04A]">{String(budget.total ?? '—')}</span>
         </div>
       </div>
+      )}
     </div>
   )
 }
-
-// ── Consumer Intel mock clusters ─────────────────────────────────
-const MOCK_CLUSTERS = [
-  { id: 'c1', run_id: 'mock', topic_id: 1, topic_label: 'Aftertaste / artificial sweetness', topic_type: 'pain_point' as const, representative_words: ['sweet','artificial','aftertaste'], review_count: 312, avg_sentiment: -0.62, sample_reviews: ['The artificial sweetener taste is overwhelming after the 2nd week.', 'Way too sweet — I had to mix with plain water and even then it stings.'] },
-  { id: 'c2', run_id: 'mock', topic_id: 2, topic_label: 'Bloating and stomach issues', topic_type: 'pain_point' as const, representative_words: ['bloating','gas','stomach'], review_count: 228, avg_sentiment: -0.51, sample_reviews: ['Gets me bloated every time. Switched to isolate and it\'s better.'] },
-  { id: 'c3', run_id: 'mock', topic_id: 3, topic_label: 'Mixability in shaker', topic_type: 'praise' as const, representative_words: ['mixes','shaker','smooth'], review_count: 189, avg_sentiment: 0.78, sample_reviews: ['Mixes perfectly in 15 seconds. No lumps at all.'] },
-  { id: 'c4', run_id: 'mock', topic_id: 4, topic_label: 'Sugar-free variant request', topic_type: 'feature_request' as const, representative_words: ['sugar-free','diabetic','no sugar'], review_count: 156, avg_sentiment: 0.1, sample_reviews: ['Please launch a stevia-sweetened or totally unsweetened variant.'] },
-  { id: 'c5', run_id: 'mock', topic_id: 5, topic_label: 'Third-party lab certification', topic_type: 'feature_request' as const, representative_words: ['lab test','certificate','authentic'], review_count: 134, avg_sentiment: -0.1, sample_reviews: ['I\'d pay more if I could see actual NABL lab test results on the pack.'] },
-  { id: 'c6', run_id: 'mock', topic_id: 6, topic_label: 'Value for money', topic_type: 'praise' as const, representative_words: ['value','price','worth'], review_count: 290, avg_sentiment: 0.64, sample_reviews: ['Best value per gram of protein in this range. No contest.'] },
-]
 
 // ── Main page ─────────────────────────────────────────────────────
 const REPORT_TABS = [
@@ -650,8 +651,21 @@ export function ReportViewPage() {
   const { runId } = useParams()
   const navigate = useNavigate()
 
-  // Use mock data (will be replaced by real API call)
-  const run = MOCK_RUN
+  // Fetch real report data from the backend
+  const { data: reportData, isLoading } = useReport(runId)
+  const run = reportData?.run ?? null
+  const report = reportData?.report ?? null
+  const insights = reportData?.insights ?? []
+  const clusters = reportData?.clusters ?? []
+  const competitors = reportData?.competitors ?? []
+  const trends = reportData?.trends ?? []
+  const concepts = reportData?.concepts ?? []
+  const gtmPlans = reportData?.gtmPlans ?? []
+
+  // Compute consumer intel summary from clusters
+  const totalPositive = clusters.filter(c => c.avg_sentiment != null && c.avg_sentiment > 0.3).reduce((s, c) => s + (c.review_count ?? 0), 0)
+  const totalNegative = clusters.filter(c => c.avg_sentiment != null && c.avg_sentiment < -0.3).reduce((s, c) => s + (c.review_count ?? 0), 0)
+  const totalNeutral = clusters.filter(c => c.avg_sentiment != null && c.avg_sentiment >= -0.3 && c.avg_sentiment <= 0.3).reduce((s, c) => s + (c.review_count ?? 0), 0)
 
   return (
     <div className="max-w-[1080px] mx-auto pb-12">
@@ -664,6 +678,13 @@ export function ReportViewPage() {
           <ArrowLeft size={13} /> Back to dashboard
         </button>
 
+        {isLoading ? (
+          <div className="h-[120px] animate-pulse bg-[#F5F5F4] rounded-[16px]" />
+        ) : !run ? (
+          <div className="text-center py-12">
+            <p className="text-[15px] text-[#A3A3A3]">Report not found or still loading.</p>
+          </div>
+        ) : (
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             <div className="flex items-center gap-2 mb-1">
@@ -675,10 +696,10 @@ export function ReportViewPage() {
               {run.product_category} Intelligence
             </h1>
             <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[12px] text-[#A3A3A3]">
-              <span>Market: {run.target_market}</span>
+              <span>Market: {run.target_market ?? 'India'}</span>
               {run.brand_name && <span>· Brand: {run.brand_name}</span>}
               <span>· Generated {formatDate(run.created_at)}</span>
-              <span>· Duration: {formatDuration(run.duration_seconds)}</span>
+              {run.duration_seconds && <span>· Duration: {formatDuration(run.duration_seconds)}</span>}
             </div>
           </motion.div>
 
@@ -687,20 +708,32 @@ export function ReportViewPage() {
             initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-2 flex-shrink-0"
           >
-            <button className="btn btn-outline btn-sm flex items-center gap-1.5">
+            <a
+              href={report?.pdf_url ?? '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`btn btn-outline btn-sm flex items-center gap-1.5 ${!report?.pdf_url ? 'opacity-40 pointer-events-none' : ''}`}
+            >
               <FileText size={13} /> PDF
-            </button>
-            <button className="btn btn-outline btn-sm flex items-center gap-1.5">
+            </a>
+            <a
+              href={report?.pptx_url ?? '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`btn btn-outline btn-sm flex items-center gap-1.5 ${!report?.pptx_url ? 'opacity-40 pointer-events-none' : ''}`}
+            >
               <Presentation size={13} /> PPT
-            </button>
+            </a>
             <button className="btn btn-black btn-sm flex items-center gap-1.5">
               <Download size={13} /> Export all
             </button>
           </motion.div>
         </div>
+        )}
       </div>
 
       {/* ── Tabs ── */}
+      {!isLoading && run && (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
         <Tabs tabs={REPORT_TABS}>
           {(activeTab) => (
@@ -710,23 +743,24 @@ export function ReportViewPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
             >
-              {activeTab === 'overview'    && <OverviewTab />}
+              {activeTab === 'overview'    && <OverviewTab insights={insights} competitors={competitors} clusters={clusters} />}
               {activeTab === 'consumer'    && (
                 <ConsumerIntelTab
-                  clusters={MOCK_CLUSTERS}
-                  totalPositive={720}
-                  totalNeutral={390}
-                  totalNegative={540}
+                  clusters={clusters}
+                  totalPositive={totalPositive}
+                  totalNeutral={totalNeutral}
+                  totalNegative={totalNegative}
                 />
               )}
-              {activeTab === 'competitors' && <CompetitorTab />}
-              {activeTab === 'trends'      && <TrendsTab />}
-              {activeTab === 'concepts'    && <ConceptsTab />}
-              {activeTab === 'gtm'         && <GTMTab />}
+              {activeTab === 'competitors' && <CompetitorTab competitors={competitors} />}
+              {activeTab === 'trends'      && <TrendsTab trends={trends} />}
+              {activeTab === 'concepts'    && <ConceptsTab concepts={concepts} />}
+              {activeTab === 'gtm'         && <GTMTab gtmPlans={gtmPlans} />}
             </motion.div>
           )}
         </Tabs>
       </motion.div>
+      )}
     </div>
   )
 }

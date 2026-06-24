@@ -1,25 +1,30 @@
 // src/pages/SentimentPage.tsx
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   TrendingUp, TrendingDown, AlertCircle, Activity,
   ShoppingBag, MessageSquare, MessageCircle, Bell, ArrowUpRight, Minus,
+  Loader2,
 } from 'lucide-react'
 import { SentimentGauge } from '@/components/charts/SentimentGauge'
 import { TrendVelocityChart } from '@/components/charts/TrendVelocityChart'
-import { useRealtimeSentiment } from '@/hooks/useRealtimeSentiment'
-import { useAuth } from '@/hooks/useAuth'
+import { getSentimentHistory } from '@/lib/api'
+import { timeAgo } from '@/lib/mockData'
+import type { SentimentScore } from '@/hooks/useRealtimeSentiment'
 
-// ── Mock Data ─────────────────────────────────────────────────────
+// The backend sentiment_scores table includes an alert_sent flag that the
+// shared SentimentScore type doesn't model, so we extend it locally.
+type SentimentScoreRow = SentimentScore & { alert_sent?: boolean }
+
+// ── Static Configuration ─────────────────────────────────────────
+// Platform list is display configuration (names + icons). Scores here
+// are placeholder demo values; real per-platform breakdown is not yet
+// exposed by the API.
 const PLATFORMS = [
   { id: 'amazon',  label: 'Amazon',  icon: ShoppingBag,    score: 0.62, count: 1842, delta: +0.08 },
   { id: 'reddit',  label: 'Reddit',  icon: MessageSquare,  score: 0.44, count: 312, delta: -0.05 },
   { id: 'twitter', label: 'X/Twitter', icon: MessageCircle, score: 0.55, count: 987, delta: +0.12 },
-]
-
-const MOCK_ALERTS = [
-  { date: '12 Apr 2026', message: 'Score dropped 0.18 points — Reddit thread gaining traction', type: 'drop' },
-  { date: '5 Apr 2026',  message: 'Negative keyword spike: "chalky texture" in 48 mentions', type: 'spike' },
 ]
 
 const KEYWORDS_POS = [
@@ -45,18 +50,32 @@ function sentimentColor(score: number) {
 
 // ── Component ─────────────────────────────────────────────────────
 export function SentimentPage() {
-  const { user } = useAuth()
-  const { scoreHistory, isConnected } = useRealtimeSentiment(user?.id)
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null)
+
+  // ── Fetch real sentiment history from the API ──
+  // getSentimentHistory returns { scores: SentimentScore[], total: number }
+  // Backend returns scores ordered newest-first; we reverse for chronology.
+  const { data, isLoading } = useQuery<{ scores: SentimentScoreRow[]; total: number }>({
+    queryKey: ['sentiment-history'],
+    queryFn: () => getSentimentHistory(),
+  })
+
+  const rawScores: SentimentScoreRow[] = data?.scores ?? []
+  // Chronological order (oldest → newest) for the trend chart
+  const scoreHistory = [...rawScores].reverse()
+  const isConnected = !isLoading && rawScores.length > 0
 
   // Current overall score (average last 3 readings)
   const recentScores = scoreHistory.slice(-3)
   const currentScore = recentScores.length
     ? recentScores.reduce((a, s) => a + s.score, 0) / recentScores.length
-    : 0.54
+    : 0
 
   // 7-day avg delta
-  const week7Avg = scoreHistory.slice(-10, -3).reduce((a, s) => a + s.score, 0) / 7 || 0
+  const prevWindow = scoreHistory.slice(-10, -3)
+  const week7Avg = prevWindow.length
+    ? prevWindow.reduce((a, s) => a + s.score, 0) / prevWindow.length
+    : 0
   const delta = currentScore - week7Avg
 
   // Chart data for 30-day trend
@@ -65,11 +84,77 @@ export function SentimentPage() {
     score: parseFloat(s.score.toFixed(3)),
   }))
 
+  // Latest reading drives the aggregate stats strip
+  const latest = scoreHistory[scoreHistory.length - 1] ?? null
+  const totalMentions = scoreHistory.reduce((a, s) => a + (s.post_count ?? 0), 0)
+
+  // Real alerts: derive from scores flagged by the backend (alert_sent)
+  const alerts = rawScores
+    .filter(s => s.alert_sent)
+    .map(s => ({
+      date: new Date(s.scored_at).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+      }),
+      message: `Sentiment alert for ${s.brand_name} — score ${s.score >= 0 ? '+' : ''}${s.score.toFixed(2)} across ${s.platform ?? 'all platforms'}`,
+      type: s.score < 0 ? 'drop' : 'spike',
+    }))
+
+  const updatedAgo = latest ? timeAgo(latest.scored_at) : '—'
+
   const PlatformIcon = {
     amazon: ShoppingBag,
     reddit: MessageSquare,
     twitter: MessageCircle,
   } as Record<string, any>
+
+  // ── Loading state ──
+  if (isLoading) {
+    return (
+      <div className="max-w-[1080px] mx-auto pb-12">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-mono bg-[#0F0F0F] text-[#C8F04A] px-2 py-0.5 rounded uppercase tracking-wider">Agent 09</span>
+              <span className="text-[12px] font-semibold tracking-[0.1em] uppercase text-[#A3A3A3]">Brand Health Monitor</span>
+            </div>
+            <h1 className="text-[28px] font-bold tracking-tight text-[#0A0A0A]">
+              Sentiment Tracker
+            </h1>
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center py-24 text-[#A3A3A3]">
+          <Loader2 size={28} className="animate-spin mb-3" />
+          <p className="text-[13px]">Loading sentiment data…</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Empty state ──
+  if (!rawScores.length) {
+    return (
+      <div className="max-w-[1080px] mx-auto pb-12">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-mono bg-[#0F0F0F] text-[#C8F04A] px-2 py-0.5 rounded uppercase tracking-wider">Agent 09</span>
+              <span className="text-[12px] font-semibold tracking-[0.1em] uppercase text-[#A3A3A3]">Brand Health Monitor</span>
+            </div>
+            <h1 className="text-[28px] font-bold tracking-tight text-[#0A0A0A]">
+              Sentiment Tracker
+            </h1>
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <Activity size={32} className="text-[#A3A3A3] mb-4" />
+          <p className="text-[14px] text-[#0A0A0A] font-medium mb-1">No sentiment data yet</p>
+          <p className="text-[13px] text-[#A3A3A3] max-w-md">
+            Sentiment tracking starts when you add a brand and run a report.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-[1080px] mx-auto pb-12">
@@ -94,7 +179,7 @@ export function SentimentPage() {
         >
           <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-[#22C55E] animate-pulse' : 'bg-[#A3A3A3]'}`} />
           {isConnected ? 'Live ' : 'Polling · '}
-          <span className="text-[11px]">Updated 42m ago</span>
+          <span className="text-[11px]">Updated {updatedAgo}</span>
         </motion.div>
       </div>
 
@@ -159,10 +244,10 @@ export function SentimentPage() {
             className="sm:col-span-3 bg-[#0F0F0F] rounded-[20px] p-5 text-white flex items-center justify-between gap-6"
           >
             {[
-              { label: 'Positive reviews', value: '62%', color: '#C8F04A' },
-              { label: 'Neutral',           value: '24%', color: '#A3A3A3' },
-              { label: 'Negative',          value: '14%', color: '#EF4444' },
-              { label: 'Total mentions',    value: '3,141', color: '#fff' },
+              { label: 'Positive reviews', value: `${latest?.positive_pct ?? 0}%`, color: '#C8F04A' },
+              { label: 'Neutral',           value: `${latest?.neutral_pct ?? 0}%`, color: '#A3A3A3' },
+              { label: 'Negative',          value: `${latest?.negative_pct ?? 0}%`, color: '#EF4444' },
+              { label: 'Total mentions',    value: totalMentions.toLocaleString('en-IN'), color: '#fff' },
             ].map((stat) => (
               <div key={stat.label} className="text-center flex-1">
                 <div className="text-[22px] font-black" style={{ color: stat.color }}>{stat.value}</div>
@@ -276,29 +361,41 @@ export function SentimentPage() {
             <Bell size={14} className="text-[#A3A3A3]" /> Alert History
           </h3>
           <div className="space-y-3">
-            {MOCK_ALERTS.map((alert, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.38 + i * 0.05 }}
-                className="flex items-start justify-between gap-4 bg-[#FEF2F2] rounded-xl p-4 border border-[rgba(239,68,68,0.1)]"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#EF4444] mt-1.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-[13px] font-medium text-[#0A0A0A]">{alert.message}</p>
-                    <p className="text-[11px] text-[#A3A3A3] mt-0.5">{alert.date}</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-bold bg-[#EF4444] text-white px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0">
-                  Alert
-                </span>
-              </motion.div>
-            ))}
-            <p className="text-[12px] text-[#A3A3A3] text-center mt-2">
-              Showing last 2 alerts · <button className="text-[#0A0A0A] underline underline-offset-2 font-medium">View all</button>
-            </p>
+            {alerts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <Bell size={20} className="text-[#A3A3A3] mb-3" />
+                <p className="text-[13px] text-[#0A0A0A] font-medium mb-1">No alerts yet</p>
+                <p className="text-[12px] text-[#A3A3A3] max-w-xs">
+                  You'll be notified here when your brand sentiment drops or spikes unexpectedly.
+                </p>
+              </div>
+            ) : (
+              <>
+                {alerts.map((alert, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.38 + i * 0.05 }}
+                    className="flex items-start justify-between gap-4 bg-[#FEF2F2] rounded-xl p-4 border border-[rgba(239,68,68,0.1)]"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#EF4444] mt-1.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-[13px] font-medium text-[#0A0A0A]">{alert.message}</p>
+                        <p className="text-[11px] text-[#A3A3A3] mt-0.5">{alert.date}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold bg-[#EF4444] text-white px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0">
+                      Alert
+                    </span>
+                  </motion.div>
+                ))}
+                <p className="text-[12px] text-[#A3A3A3] text-center mt-2">
+                  Showing last {alerts.length} alert{alerts.length === 1 ? '' : 's'} · <button className="text-[#0A0A0A] underline underline-offset-2 font-medium">View all</button>
+                </p>
+              </>
+            )}
           </div>
         </motion.div>
       </div>

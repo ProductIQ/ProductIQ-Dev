@@ -2,7 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { listReports, getReport, startRun, type RunRequest } from '@/lib/api'
+import { listReports, getRun, startRun, type RunRequest } from '@/lib/api'
 
 export function useRuns() {
   return useQuery({
@@ -14,7 +14,7 @@ export function useRuns() {
 export function useRun(runId: string | null) {
   return useQuery({
     queryKey: ['run', runId],
-    queryFn:  () => getReport(runId!),
+    queryFn:  () => getRun(runId!),
     enabled:  !!runId,
     refetchInterval: (query) => {
       const status = query.state.data?.run?.status

@@ -4,12 +4,25 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { ChevronRight, X, Check, Bell, BellOff } from 'lucide-react'
+import { ChevronRight, X, Check, Bell, BellOff, Loader2, Radio } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { type Notification } from '@/lib/mockData'
 import {
-  MOCK_NOTIFICATIONS,
-  type Notification,
-} from '@/lib/mockData'
-import { timeAgo } from '@/lib/mockData'
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from '@/lib/api'
+import { useRealtimeNotifications } from '@/hooks/useRealtime'
+
+// ── timeAgo — inlined from mockData (pure helper, not in @/lib/utils) ─────────
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 
 // ── Category label — text only ───────────────────────────────────────────────
 const CATEGORY_LABELS: Record<string, string> = {
@@ -121,15 +134,84 @@ type FilterTab = 'all' | 'unread' | 'alerts' | 'reports'
 
 // ── Main page ────────────────────────────────────────────────────────────────
 export function NotificationsPage() {
-  const [notifs, setNotifs]  = useState<Notification[]>(MOCK_NOTIFICATIONS)
+  const queryClient = useQueryClient()
   const [tab, setTab]        = useState<FilterTab>('all')
   const [prefs, setPrefs]    = useState<Record<string, boolean>>(
     Object.fromEntries(PREF_ITEMS.map(p => [p.id, true]))
   )
 
-  const markRead   = (id: string) => setNotifs(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n))
-  const dismiss    = (id: string) => setNotifs(prev => prev.filter(n => n.id !== id))
-  const markAll    = () => setNotifs(prev => prev.map(n => ({ ...n, isRead: true })))
+  // ── Realtime subscription: live updates when new notifications arrive ──
+  useRealtimeNotifications()
+
+  // ── Fetch notifications ──
+  const { data, isLoading } = useQuery<{ notifications: Notification[]; total: number }>({
+    queryKey: ['notifications'],
+    queryFn: () => getNotifications(false),
+    // Refetch every 60s as a fallback in case realtime misses an event
+    refetchInterval: 60_000,
+  })
+  const notifs = data?.notifications ?? []
+
+  // ── Mark one as read (optimistic) ──
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => markNotificationRead(id),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ['notifications'] })
+      const prev = queryClient.getQueryData<{ notifications: Notification[]; total: number }>(['notifications'])
+      if (prev) {
+        queryClient.setQueryData(['notifications'], {
+          ...prev,
+          notifications: prev.notifications.map(n => n.id === id ? { ...n, isRead: true } : n),
+        })
+      }
+      return { prev }
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['notifications'], ctx.prev)
+    },
+  })
+
+  // ── Mark all as read (optimistic) ──
+  const markAllMutation = useMutation({
+    mutationFn: () => markAllNotificationsRead(),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['notifications'] })
+      const prev = queryClient.getQueryData<{ notifications: Notification[]; total: number }>(['notifications'])
+      if (prev) {
+        queryClient.setQueryData(['notifications'], {
+          ...prev,
+          notifications: prev.notifications.map(n => ({ ...n, isRead: true })),
+        })
+      }
+      return { prev }
+    },
+    onError: (_e, _args, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['notifications'], ctx.prev)
+    },
+  })
+
+  // ── Dismiss — optimistic removal from cache (no delete API yet) ──
+  const dismissMutation = useMutation({
+    mutationFn: async (id: string) => id,
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ['notifications'] })
+      const prev = queryClient.getQueryData<{ notifications: Notification[]; total: number }>(['notifications'])
+      if (prev) {
+        queryClient.setQueryData(['notifications'], {
+          ...prev,
+          notifications: prev.notifications.filter(n => n.id !== id),
+        })
+      }
+      return { prev }
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['notifications'], ctx.prev)
+    },
+  })
+
+  const markRead   = (id: string) => markReadMutation.mutate(id)
+  const dismiss    = (id: string) => dismissMutation.mutate(id)
+  const markAll    = () => markAllMutation.mutate()
   const togglePref = (id: string) => setPrefs(p => ({ ...p, [id]: !p[id] }))
 
   const filtered = notifs.filter(n => {
@@ -147,7 +229,10 @@ export function NotificationsPage() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-8">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <p className="text-[11px] font-semibold tracking-[0.1em] uppercase text-[#A3A3A3] mb-1">Workspace</p>
+          <p className="text-[11px] font-semibold tracking-[0.1em] uppercase text-[#A3A3A3] mb-1 flex items-center gap-1.5">
+            <Radio size={10} className="text-[#C8F04A]" style={{ animation: 'pulse 2s infinite' }} />
+            Live · Workspace
+          </p>
           <h1 className="text-[28px] font-bold tracking-tight text-[#0A0A0A]">Notifications</h1>
           <p className="text-[13px] text-[#A3A3A3] mt-1">
             {notifs.length} total{unread > 0 ? ` · ${unread} unread` : ' · all read'}
@@ -192,7 +277,18 @@ export function NotificationsPage() {
 
           {/* Notification list */}
           <div className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] overflow-hidden">
-            {filtered.length === 0 ? (
+            {isLoading ? (
+              <div className="py-14 text-center">
+                <Loader2 size={18} className="animate-spin text-[#A3A3A3] mx-auto mb-2" />
+                <p className="text-[12px] text-[#A3A3A3]">Loading notifications…</p>
+              </div>
+            ) : notifs.length === 0 ? (
+              <div className="py-14 text-center">
+                <BellOff size={20} className="text-[#C8C8C8] mx-auto mb-2" />
+                <p className="text-[13px] font-semibold text-[#0A0A0A] mb-1">No notifications yet</p>
+                <p className="text-[12px] text-[#A3A3A3]">You're all caught up. Check back later.</p>
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="py-14 text-center">
                 <p className="text-[13px] font-semibold text-[#0A0A0A] mb-1">Nothing here</p>
                 <p className="text-[12px] text-[#A3A3A3]">Switch filter or check back later.</p>

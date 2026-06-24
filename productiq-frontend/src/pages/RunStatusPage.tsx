@@ -6,8 +6,8 @@ import { ArrowLeft, ChevronDown, Download } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import { AgentGrid } from '@/components/agents/AgentGrid'
 import { useAgentStream } from '@/hooks/useAgentStream'
+import { useRun } from '@/hooks/useRuns'
 import { useUIStore } from '@/stores/useUIStore'
-import { MOCK_RUNS } from '@/lib/api'
 
 export function RunStatusPage() {
   const { runId }             = useParams<{ runId: string }>()
@@ -18,13 +18,16 @@ export function RunStatusPage() {
   const logRef                = useRef<HTMLDivElement>(null)
   const [logOpen, setLogOpen] = useState(false)
 
+  // Fetch run data from the real API
+  const { data: runData } = useRun(runId ?? null)
+  const run = runData?.run ?? null
+
   // Collapse sidebar on this full-page view
   useEffect(() => {
     setSidebarCollapsed(true)
     return () => setSidebarCollapsed(prevCollapsed.current)
   }, [setSidebarCollapsed])
 
-  const run = MOCK_RUNS.find((r) => r.id === runId)
   const { agentStatuses, progressPct, logs, isConnected } = useAgentStream(
     runId ?? null,
     run?.status !== 'completed',
@@ -213,14 +216,20 @@ export function RunStatusPage() {
                   View full report <ArrowLeft size={13} className="rotate-180" />
                 </button>
                 <div className="flex gap-2">
-                  {['PDF', 'PPTX'].map((fmt) => (
-                    <button
-                      key={fmt}
-                      className="btn btn-outline-white btn-sm flex-1"
+                  {[
+                    { label: 'PDF', url: runData?.report?.pdf_url },
+                    { label: 'PPTX', url: runData?.report?.pptx_url },
+                  ].map((fmt) => (
+                    <a
+                      key={fmt.label}
+                      href={fmt.url ?? '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`btn btn-outline-white btn-sm flex-1 ${!fmt.url ? 'opacity-40 pointer-events-none' : ''}`}
                     >
                       <Download size={12} />
-                      {fmt}
-                    </button>
+                      {fmt.label}
+                    </a>
                   ))}
                 </div>
               </div>

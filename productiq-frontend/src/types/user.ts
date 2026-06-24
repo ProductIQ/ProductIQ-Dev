@@ -1,6 +1,7 @@
 // src/types/user.ts
 
 export type Plan = 'free' | 'pro' | 'enterprise'
+export type UserRole = 'user' | 'admin'
 
 export interface Profile {
   id: string
@@ -8,6 +9,7 @@ export interface Profile {
   full_name: string | null
   company_name: string | null
   plan: Plan
+  role?: UserRole
   reports_used_this_month: number
   reports_limit: number
   razorpay_customer_id: string | null

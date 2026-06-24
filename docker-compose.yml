@@ -1,0 +1,121 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ProductIQ — Full Production Stack
+#
+# Services:
+#   web      — Frontend (nginx serving React build + proxying /api to backend)
+#   api      — Backend FastAPI (uvicorn with 2 workers)
+#   worker   — Celery worker (pipeline + monitoring queues)
+#   beat     — Celery beat scheduler (daily sentiment/price checks)
+#   flower   — Celery Flower dashboard (optional, port 5555)
+#   redis    — Redis (Celery broker + SSE pub/sub + rate limiting + cache)
+#
+# Usage:
+#   1. Copy productiq-backend/.env.example to productiq-backend/.env and fill in
+#   2. Copy productiq-frontend/.env.example to productiq-frontend/.env and fill in
+#   3. docker compose up -d
+#   4. Visit http://localhost
+#
+# The frontend nginx proxies /api/* to the backend service.
+# No need to expose backend port directly — all traffic goes through nginx.
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Frontend (nginx + React static build) ───────────────────────────────────
+  web:
+    build:
+      context: ./productiq-frontend
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_API_URL: /api
+        VITE_RAZORPAY_KEY_ID: ${VITE_RAZORPAY_KEY_ID}
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Backend API (FastAPI + uvicorn) ─────────────────────────────────────────
+  api:
+    build: ./productiq-backend
+    env_file: ./productiq-backend/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+    # Don't expose port directly — nginx proxies traffic
+    expose:
+      - "8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+  # ── Celery Worker (pipeline + monitoring) ───────────────────────────────────
+  worker:
+    build: ./productiq-backend
+    env_file: ./productiq-backend/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: >
+      celery -A celery_app worker
+      --loglevel=info
+      --concurrency=2
+      -Q pipeline,monitoring,default
+    restart: unless-stopped
+
+  # ── Celery Beat (scheduled tasks) ───────────────────────────────────────────
+  beat:
+    build: ./productiq-backend
+    env_file: ./productiq-backend/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A celery_app beat
+      --loglevel=info
+    restart: unless-stopped
+
+  # ── Celery Flower (dashboard — optional) ────────────────────────────────────
+  flower:
+    build: ./productiq-backend
+    env_file: ./productiq-backend/.env
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    command: >
+      celery -A celery_app flower
+      --port=5555
+      --broker_api=redis://redis:6379/0
+    restart: unless-stopped
+    profiles: ["monitoring"]  # Only starts with: docker compose --profile monitoring up
+
+  # ── Redis (broker + cache + rate limiting + SSE) ────────────────────────────
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+volumes:
+  redis_data:

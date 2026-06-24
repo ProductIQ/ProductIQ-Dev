@@ -1,4 +1,12 @@
-version: "3.9"
+# ──────────────────────────────────────────────────────────────────────────────
+# ProductIQ — Backend-Only Docker Compose (development)
+#
+# For full-stack production (frontend + backend + nginx), use the root-level
+# docker-compose.yml in the project root instead.
+#
+# This file is for backend-only development: API + worker + beat + Redis.
+# Usage: docker compose up -d
+# ──────────────────────────────────────────────────────────────────────────────
 
 services:
   api:
@@ -9,10 +17,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2 --reload
-    volumes:
-      - .:/app     # Hot reload in development — remove for production
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   worker:
     build: .
@@ -29,7 +40,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: celery -A celery_app beat --loglevel=info --scheduler celery.beat.PersistentScheduler
+    command: celery -A celery_app beat --loglevel=info
     restart: unless-stopped
 
   flower:
@@ -41,6 +52,7 @@ services:
       - redis
     command: celery -A celery_app flower --port=5555 --broker_api=redis://redis:6379/0
     restart: unless-stopped
+    profiles: ["monitoring"]
 
   redis:
     image: redis:7-alpine

@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual envs
+venv/
+env/
+.venv/
+
+# Testing
+.pytest_cache/
+tests/
+htmlcov/
+.coverage
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Env files (never copy into image)
+.env
+.env.local
+.env.*.local
+
+# Docs
+*.md
+scripts/
+
+# OS
+.DS_Store
+Thumbs.db

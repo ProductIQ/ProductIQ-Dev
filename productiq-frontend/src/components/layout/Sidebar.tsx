@@ -5,7 +5,7 @@ import {
   LayoutDashboard, FilePlus, TrendingUp, DollarSign,
   Settings, ChevronLeft, ChevronRight, LogOut, Network,
   Zap, Building2, MessageSquare, ArrowLeftRight, CheckSquare,
-  Bell,
+  Bell, Shield,
 } from 'lucide-react'
 import { useUIStore } from '@/stores/useUIStore'
 import { useAuth } from '@/hooks/useAuth'
@@ -215,6 +215,44 @@ export function Sidebar() {
         ))}
 
         <div className="flex-1" />
+
+        {/* Admin nav — only visible to admins */}
+        {profile?.role === 'admin' && (
+          <>
+            {!sidebarCollapsed && (
+              <p className="text-[9px] font-bold tracking-[0.12em] uppercase text-white/20 px-3 mb-1 mt-1">Admin</p>
+            )}
+            <NavLink
+              to="/admin"
+              className={({ isActive }) => cn(
+                'flex items-center gap-3 rounded-xl transition-all duration-150 group relative',
+                sidebarCollapsed ? 'justify-center p-3' : 'px-3 py-2.5',
+                isActive
+                  ? 'bg-white/10 text-white'
+                  : 'text-white/40 hover:text-white/80 hover:bg-white/5',
+              )}
+            >
+              {({ isActive }) => (
+                <>
+                  <Shield size={17} strokeWidth={isActive ? 2 : 1.5} className="flex-shrink-0 transition-all" />
+                  <AnimatePresence>
+                    {!sidebarCollapsed && (
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1">
+                        <span className="text-[13px] font-medium">Admin Panel</span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-[#C8F04A]" />}
+                  {sidebarCollapsed && (
+                    <div className="absolute left-full ml-3 px-3 py-1.5 rounded-lg text-[12px] text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50" style={{ background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.10)' }}>
+                      Admin Panel
+                    </div>
+                  )}
+                </>
+              )}
+            </NavLink>
+          </>
+        )}
 
         {/* Bottom nav */}
         {NAV_BOTTOM.map((item) => (

@@ -7,8 +7,14 @@ import { motion, AnimatePresence } from 'motion/react'
 import {
   Send, ArrowRight, RotateCcw, Copy, Check, ChevronRight,
 } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  MOCK_CHAT_SESSIONS,
+  getChatSessions,
+  getChatMessages,
+  sendChatMessage,
+  deleteChatSession,
+} from '@/lib/api'
+import {
   MOCK_SUGGESTED_QUESTIONS,
   type ChatMessage,
   type ChatSession,
@@ -188,76 +194,117 @@ function SessionList({
   )
 }
 
-// ── Canned responses for demo ────────────────────────────────────────────────
-function getResponse(q: string): { content: string; citations: { text: string; source: string }[] } {
-  const lower = q.toLowerCase()
-  if (lower.includes('pain') || lower.includes('unhappy') || lower.includes('complaint')) {
-    return {
-      content: `Based on review cluster analysis across 847 customer reviews:\n\n**Top pain points by volume**\n\n- Packaging quality (127 reviews, ★2.1) — scoop missing or buried, seal fails to reseal\n- Taste consistency (98 reviews, ★2.8) — batch-to-batch variation\n- Mixability (76 reviews, ★3.0) — clumps in cold water\n- Value perception (68 reviews, ★2.5) — underfilled appearance\n\nMost actionable gap: packaging. Competitors MuscleBlaze and MyProtein score ★4.1 on packaging vs your ★3.1.`,
-      citations: [{ text: '847 reviews analysed', source: 'Review Miner' }, { text: 'Competitor packaging benchmark', source: 'Competitor Intel' }],
-    }
-  }
-  if (lower.includes('price') || lower.includes('optimal') || lower.includes('concept')) {
-    return {
-      content: `For Concept #2 (Ashwagandha + Whey Blend, 1kg), the data suggests an optimal launch price of ₹1,249–₹1,399.\n\n**Reasoning**\n\n- Market leaders in adaptogens + protein: ₹1,100–₹1,600\n- Price elasticity: every ₹100 above ₹1,400 reduces conversion ~18%\n- Psychological anchor: ₹1,299 sits below the ₹1,300 barrier\n\n**Recommendation**: Launch at ₹1,399 with a 90-day introductory offer at ₹1,199, then normalise.`,
-      citations: [{ text: 'Price elasticity model', source: 'Insight Synthesis' }, { text: 'Competitor pricing matrix', source: 'Price Tracker' }],
-    }
-  }
-  if (lower.includes('fssai') || lower.includes('ashwagandha') || lower.includes('compliance')) {
-    return {
-      content: `FSSAI requirements for ashwagandha in food products (current as of 2026):\n\n- Classified as a permitted ingredient under Schedule 1, List B\n- Industry standard dosage: 300–600mg per serving\n- Must declare the branded extract name (e.g. "KSM-66 Ashwagandha") on the label\n- Immunity claims are prohibited without clinical evidence — use "supports stress adaptation" instead\n- Third-party certificate of analysis required before manufacturing\n\n**Timeline**: FSSAI nutraceutical registration takes 45–90 days. Budget ₹80,000–₹1.5L.`,
-      citations: [{ text: 'FSSAI Schedule 1 List B', source: 'Compliance Guardian' }],
-    }
-  }
-  return {
-    content: `Based on the data from your most recent run across 847 reviews and 18 competitor SKUs, here are the key findings:\n\n- The sugar-free certified segment is 0% of the top-10 — the largest uncaptured gap\n- Packaging quality is the top pain point (127 reviews, ★2.1)\n- Your target demographic (25–38, urban professionals) shows 92% positive NPS when taste scores above ★4.0\n\nWould you like me to go deeper on any of these points?`,
-    citations: [{ text: '847 reviews synthesised', source: 'Review Miner' }],
-  }
-}
-
 // ── Main page ────────────────────────────────────────────────────────────────
 export function ChatPage() {
-  const [sessions, setSessions]   = useState<ChatSession[]>(MOCK_CHAT_SESSIONS)
-  const [activeId, setActiveId]   = useState(MOCK_CHAT_SESSIONS[0].id)
-  const [input, setInput]         = useState('')
-  const [thinking, setThinking]   = useState(false)
-  const bottomRef                  = useRef<HTMLDivElement>(null)
+  const queryClient = useQueryClient()
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [input, setInput]       = useState('')
+  const bottomRef                = useRef<HTMLDivElement>(null)
 
-  const active = sessions.find(s => s.id === activeId) ?? sessions[0]
+  // ── Fetch sessions ──
+  const { data: sessionsData } = useQuery<ChatSession[]>({
+    queryKey: ['chat-sessions'],
+    queryFn: async () => {
+      const raw = await getChatSessions() as Record<string, unknown>[]
+      return raw.map(s => ({ ...s, messages: (s.messages as ChatMessage[]) ?? [] })) as ChatSession[]
+    },
+  })
+  const sessions = sessionsData ?? []
+
+  // ── Sync activeId with loaded sessions ──
+  useEffect(() => {
+    if (sessions.length === 0) {
+      setActiveId(null)
+    } else if (!activeId || !sessions.find(s => s.id === activeId)) {
+      setActiveId(sessions[0].id)
+    }
+  }, [sessions, activeId])
+
+  // ── Fetch messages for active session ──
+  const { data: messagesData } = useQuery<ChatMessage[]>({
+    queryKey: ['chat-messages', activeId],
+    queryFn: () => getChatMessages(activeId!) as Promise<ChatMessage[]>,
+    enabled: !!activeId,
+  })
+  const messages = messagesData ?? []
+
+  // Merge fetched messages into the active session for display
+  const displaySessions = sessions.map(s =>
+    s.id === activeId ? { ...s, messages } : s,
+  )
+  const active = displaySessions.find(s => s.id === activeId)
+
+  // ── Send message mutation ──
+  const sendMutation = useMutation({
+    mutationFn: (payload: { message: string; session_id?: string }) =>
+      sendChatMessage(payload) as Promise<{ session_id: string; answer: string; source?: string }>,
+    onMutate: async (payload) => {
+      const userMsg: ChatMessage = {
+        id: `u-${Date.now()}`, role: 'user', content: payload.message,
+        timestamp: new Date().toISOString(),
+      }
+      await queryClient.cancelQueries({ queryKey: ['chat-messages', activeId] })
+      const prev = queryClient.getQueryData<ChatMessage[]>(['chat-messages', activeId])
+      queryClient.setQueryData(['chat-messages', activeId], [...(prev ?? []), userMsg])
+      return { prev }
+    },
+    onError: (_e, _payload, ctx) => {
+      if (ctx?.prev !== undefined) {
+        queryClient.setQueryData(['chat-messages', activeId], ctx.prev)
+      }
+    },
+    onSuccess: (data) => {
+      const aiMsg: ChatMessage = {
+        id: `a-${Date.now()}`, role: 'assistant', content: data.answer,
+        timestamp: new Date().toISOString(),
+        citations: data.source ? [{ text: data.source, source: 'RAG' }] : undefined,
+      }
+      const current = queryClient.getQueryData<ChatMessage[]>(['chat-messages', activeId]) ?? []
+      queryClient.setQueryData(['chat-messages', activeId], [...current, aiMsg])
+      // Refresh sessions list (a new session may have been created)
+      queryClient.invalidateQueries({ queryKey: ['chat-sessions'] })
+      // Switch to the session the backend assigned
+      if (data.session_id && data.session_id !== activeId) {
+        setActiveId(data.session_id)
+      }
+    },
+  })
+
+  // ── Delete session mutation (optimistic) ──
+  const deleteMutation = useMutation({
+    mutationFn: (sessionId: string) => deleteChatSession(sessionId),
+    onMutate: async (sessionId) => {
+      await queryClient.cancelQueries({ queryKey: ['chat-sessions'] })
+      const prev = queryClient.getQueryData<ChatSession[]>(['chat-sessions'])
+      if (prev) {
+        queryClient.setQueryData(['chat-sessions'], prev.filter(s => s.id !== sessionId))
+      }
+      return { prev }
+    },
+    onError: (_e, _sessionId, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['chat-sessions'], ctx.prev)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chat-sessions'] })
+    },
+  })
+
+  const thinking = sendMutation.isPending
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [active?.messages.length, thinking])
+  }, [messages.length, thinking])
 
   const send = () => {
     if (!input.trim() || thinking) return
     const q = input.trim()
     setInput('')
-    setThinking(true)
-
-    const userMsg: ChatMessage = {
-      id: `u-${Date.now()}`, role: 'user', content: q,
-      timestamp: new Date().toISOString(),
-    }
-    setSessions(prev => prev.map(s =>
-      s.id === activeId ? { ...s, messages: [...s.messages, userMsg] } : s,
-    ))
-
-    setTimeout(() => {
-      const { content, citations } = getResponse(q)
-      const aiMsg: ChatMessage = {
-        id: `a-${Date.now()}`, role: 'assistant', content,
-        timestamp: new Date().toISOString(), citations,
-      }
-      setSessions(prev => prev.map(s =>
-        s.id === activeId ? { ...s, messages: [...s.messages, aiMsg] } : s,
-      ))
-      setThinking(false)
-    }, 1600)
+    sendMutation.mutate({ message: q, session_id: activeId ?? undefined })
   }
 
-  const clear = () =>
-    setSessions(prev => prev.map(s => s.id === activeId ? { ...s, messages: [] } : s))
+  const clear = () => {
+    if (activeId) deleteMutation.mutate(activeId)
+  }
 
   return (
     <div className="max-w-[1080px] mx-auto" style={{ height: 'calc(100vh - 112px)' }}>
@@ -276,7 +323,7 @@ export function ChatPage() {
       <div className="flex gap-4 h-[calc(100%-68px)]">
         {/* Session list */}
         <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.06 }}>
-          <SessionList sessions={sessions} activeId={activeId} onSelect={setActiveId} />
+          <SessionList sessions={sessions} activeId={activeId ?? ''} onSelect={setActiveId} />
         </motion.div>
 
         {/* Chat panel */}
@@ -289,12 +336,13 @@ export function ChatPage() {
           {/* Chat header */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-[rgba(0,0,0,0.06)]">
             <div>
-              <p className="text-[13px] font-bold text-[#0A0A0A]">{active.brandName} — Intelligence Assistant</p>
-              <p className="text-[10px] text-[#A3A3A3] mt-0.5">Context: {active.category} · {active.messages.length} messages</p>
+              <p className="text-[13px] font-bold text-[#0A0A0A]">{active ? `${active.brandName} — Intelligence Assistant` : 'Intelligence Assistant'}</p>
+              <p className="text-[10px] text-[#A3A3A3] mt-0.5">Context: {active ? `${active.category} · ${messages.length} messages` : 'No active session'}</p>
             </div>
             <button
               onClick={clear}
-              className="flex items-center gap-1 text-[11px] text-[#A3A3A3] hover:text-[#0A0A0A] transition-colors"
+              disabled={!activeId}
+              className="flex items-center gap-1 text-[11px] text-[#A3A3A3] hover:text-[#0A0A0A] transition-colors disabled:opacity-40"
             >
               <RotateCcw size={10} /> Clear
             </button>
@@ -302,7 +350,20 @@ export function ChatPage() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
-            {active.messages.length === 0 ? (
+            {sessions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div
+                  className="w-12 h-12 rounded-[16px] flex items-center justify-center mb-4 text-[14px] font-black"
+                  style={{ background: '#C8F04A', color: '#0A0A0A' }}
+                >
+                  IQ
+                </div>
+                <p className="text-[14px] font-bold text-[#0A0A0A] mb-1.5">No conversations yet</p>
+                <p className="text-[12px] text-[#A3A3A3] max-w-xs">
+                  Ask a question to start chatting with your report data.
+                </p>
+              </div>
+            ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <div
                   className="w-12 h-12 rounded-[16px] flex items-center justify-center mb-4 text-[14px] font-black"
@@ -316,11 +377,11 @@ export function ChatPage() {
                 </p>
               </div>
             ) : (
-              active.messages.map((msg, i) => (
+              messages.map((msg, i) => (
                 <MessageBubble
                   key={msg.id}
                   msg={msg}
-                  isNew={i === active.messages.length - 1 && msg.role === 'assistant'}
+                  isNew={i === messages.length - 1 && msg.role === 'assistant'}
                 />
               ))
             )}
@@ -336,7 +397,7 @@ export function ChatPage() {
           </div>
 
           {/* Suggested questions — only when empty */}
-          {active.messages.length === 0 && (
+          {messages.length === 0 && (
             <div className="px-5 pb-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-[#A3A3A3] mb-2">Suggested</p>
               <div className="flex flex-wrap gap-1.5">
@@ -382,7 +443,7 @@ export function ChatPage() {
               </button>
             </div>
             <p className="text-[10px] text-[#C8C8C8] mt-2 text-center">
-              {active.category} context · press Enter to send, Shift+Enter for new line
+              {active ? `${active.category} context · ` : ''}press Enter to send, Shift+Enter for new line
             </p>
           </div>
         </motion.div>

@@ -3,20 +3,21 @@
 // Design: matches existing DashboardPage — white cards, #0F0F0F accent strip,
 // #A3A3A3 labels, border-[rgba(0,0,0,0.07)], no emojis, no colorful badges.
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   ArrowRight, ChevronRight, Check, RefreshCw,
   TrendingUp, TrendingDown, Activity,
 } from 'lucide-react'
+import { getIntelligenceEvents, getIntelligenceBrands } from '@/lib/api'
 import {
-  MOCK_INTEL_EVENTS,
-  MOCK_BRANDS,
   getEventColor,
   timeAgo,
   type IntelEvent,
 } from '@/lib/mockData'
+import { useRealtimeIntelEvents } from '@/hooks/useRealtime'
 
 // ── Severity dot — minimal, just a small dot in the left gutter ─────────────
 function SeverityDot({ severity, isRead }: { severity: string; isRead: boolean }) {
@@ -145,52 +146,43 @@ function InlineStat({ value, label }: { value: number | string; label: string })
   )
 }
 
-// ── Simulated live events ────────────────────────────────────────────────────
-const SIMULATED: Omit<IntelEvent, 'id' | 'timestamp' | 'isRead'>[] = [
-  {
-    type: 'alert.price_change', severity: 'warning',
-    title: 'Optimum Nutrition raised price by ₹200 on Amazon',
-    body: 'Detected a ₹200 upward price move across 3 SKUs. Possibly repositioning after MuscleBlaze recent discount.',
-    brandId: 'brand-001', brandName: 'ProteinX',
-  },
-  {
-    type: 'alert.trend_breakout', severity: 'info',
-    title: '"Collagen protein bar" trend entering breakout phase',
-    body: 'Velocity +218% vs 7-day average. Estimated mainstream peak: 4–6 weeks.',
-    brandId: 'brand-002', brandName: 'GlowLabs',
-  },
-]
-
 // ── Filter tab ───────────────────────────────────────────────────────────────
 type FilterTab = 'all' | 'alerts' | 'insights' | 'unread'
 
 // ── Main page ────────────────────────────────────────────────────────────────
 export function IntelligencePage() {
-  const [events, setEvents]   = useState<IntelEvent[]>(MOCK_INTEL_EVENTS)
   const [tab, setTab]         = useState<FilterTab>('all')
   const [brand, setBrand]     = useState('all')
   const [isLive, setIsLive]   = useState(true)
-  const simIdx                = useRef(0)
+  const [readIds, setReadIds] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
-    if (!isLive) return
-    const t = setInterval(() => {
-      const template = SIMULATED[simIdx.current % SIMULATED.length]
-      setEvents(prev => [{
-        ...template,
-        id: `live-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        isRead: false,
-      }, ...prev])
-      simIdx.current += 1
-    }, 22000)
-    return () => clearInterval(t)
-  }, [isLive])
+  // ── Realtime subscription: live intel events when isLive is on ──
+  useRealtimeIntelEvents(isLive)
+
+  const { data: rawEvents = [], isLoading, refetch } = useQuery({
+    queryKey: ['intel-events', brand],
+    queryFn: () => getIntelligenceEvents(brand === 'all' ? undefined : brand),
+    // Poll every 30s as a fallback when live (in case realtime misses an event)
+    refetchInterval: isLive ? 30_000 : false,
+  })
+  const { data: brands = [] } = useQuery({
+    queryKey: ['intel-brands'],
+    queryFn: getIntelligenceBrands,
+  })
+
+  const events: IntelEvent[] = (rawEvents as IntelEvent[]).map(e => ({
+    ...e,
+    isRead: e.isRead || readIds.has(e.id),
+  }))
 
   const markRead = (id: string) =>
-    setEvents(prev => prev.map(e => e.id === id ? { ...e, isRead: true } : e))
+    setReadIds(prev => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
   const markAll = () =>
-    setEvents(prev => prev.map(e => ({ ...e, isRead: true })))
+    setReadIds(new Set(events.map(e => e.id)))
 
   const filtered = events.filter(e => {
     if (brand !== 'all' && e.brandId !== brand) return false
@@ -230,7 +222,7 @@ export function IntelligencePage() {
             </button>
           )}
           <button
-            onClick={() => setEvents([...MOCK_INTEL_EVENTS])}
+            onClick={() => refetch()}
             className="btn btn-black btn-sm flex items-center gap-1.5"
           >
             <RefreshCw size={12} /> Refresh
@@ -264,7 +256,7 @@ export function IntelligencePage() {
             className="text-[11px] font-medium text-white bg-transparent border border-white/10 rounded-lg px-2.5 py-1.5 outline-none cursor-pointer"
           >
             <option value="all" style={{ background: '#1a1a1a' }}>All brands</option>
-            {MOCK_BRANDS.map(b => (
+            {(brands as { id: string; brandName: string }[]).map(b => (
               <option key={b.id} value={b.id} style={{ background: '#1a1a1a' }}>{b.brandName}</option>
             ))}
           </select>
@@ -300,7 +292,17 @@ export function IntelligencePage() {
         transition={{ delay: 0.14 }}
         className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] overflow-hidden"
       >
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="py-16 text-center">
+            <p className="text-[13px] font-semibold text-[#0A0A0A] mb-1">Loading…</p>
+            <p className="text-[12px] text-[#A3A3A3]">Fetching the latest intelligence events.</p>
+          </div>
+        ) : events.length === 0 ? (
+          <div className="py-16 text-center">
+            <p className="text-[13px] font-semibold text-[#0A0A0A] mb-1">No intelligence events yet</p>
+            <p className="text-[12px] text-[#A3A3A3]">Events will appear here as your brands are monitored.</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <p className="text-[13px] font-semibold text-[#0A0A0A] mb-1">Nothing here</p>
             <p className="text-[12px] text-[#A3A3A3]">Try switching to "All" or changing the brand filter.</p>

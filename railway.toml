@@ -1,0 +1,62 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ProductIQ — Railway Deployment Config
+#
+# Deploys 4 services: api, worker, beat, web
+# Redis is provisioned as a Railway add-on (not built from Dockerfile).
+#
+# Setup:
+#   1. Create a new project on Railway
+#   2. Add this railway.toml to the repo root
+#   3. Add a Redis add-on (Railway provides this)
+#   4. Set environment variables (see productiq-backend/.env.example)
+#   5. Deploy each service from the Railway dashboard
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Backend API ───────────────────────────────────────────────────────────────
+[services.api]
+source = "productiq-backend"
+dockerfilePath = "Dockerfile"
+
+[services.api.variables]
+APP_ENV = "production"
+USE_CELERY = "true"
+# REDIS_URL is auto-injected from Railway Redis add-on
+# SUPABASE_URL, SUPABASE_SERVICE_KEY, GEMINI_API_KEY, etc. must be set manually
+
+[services.api.healthcheck]
+path = "/health"
+interval = 30
+timeout = 10
+
+# ── Celery Worker ─────────────────────────────────────────────────────────────
+[services.worker]
+source = "productiq-backend"
+dockerfilePath = "Dockerfile"
+
+[services.worker.start]
+command = "celery -A celery_app worker --loglevel=info --concurrency=2 -Q pipeline,monitoring,default"
+
+[services.worker.variables]
+APP_ENV = "production"
+USE_CELERY = "true"
+
+# ── Celery Beat ───────────────────────────────────────────────────────────────
+[services.beat]
+source = "productiq-backend"
+dockerfilePath = "Dockerfile"
+
+[services.beat.start]
+command = "celery -A celery_app beat --loglevel=info"
+
+[services.beat.variables]
+APP_ENV = "production"
+USE_CELERY = "true"
+
+# ── Frontend (nginx) ──────────────────────────────────────────────────────────
+[services.web]
+source = "productiq-frontend"
+dockerfilePath = "Dockerfile"
+
+[services.web.variables]
+VITE_API_URL = "/api"
+# VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_RAZORPAY_KEY_ID must be set manually
