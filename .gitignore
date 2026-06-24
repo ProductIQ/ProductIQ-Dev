@@ -1,0 +1,27 @@
+productiq-backend/.env
+productiq-backend/venv
+
+# Logs
+productiq-frontend/logs
+productiq-frontend/*.log
+productiq-frontend/npm-debug.log*
+productiq-frontend/yarn-debug.log*
+productiq-frontend/yarn-error.log*
+productiq-frontend/pnpm-debug.log*
+productiq-frontend/lerna-debug.log*
+
+productiq-frontend/node_modules
+productiq-frontend/dist
+productiq-frontend/dist-ssr
+productiq-frontend/*.local
+
+# Editor directories and files
+productiq-frontend/.vscode/*
+productiq-frontend/!.vscode/extensions.json
+productiq-frontend/.idea
+productiq-frontend/.DS_Store
+productiq-frontend/*.suo
+productiq-frontend/*.ntvs*
+productiq-frontend/*.njsproj
+productiq-frontend/*.sln
+productiq-frontend/*.sw?
