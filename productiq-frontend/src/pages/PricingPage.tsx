@@ -41,14 +41,15 @@ const PLANS = [
     cta: 'Start Pro',
     ctaAction: 'checkout',
     features: [
-      'All 12 AI agents',
-      'Unlimited reports',
-      'Real-time brand sentiment',
-      'Price optimizer & alerts',
+      'All 20 AI agents (v2 fleet)',
+      'Unlimited intelligence reports',
+      '24/7 continuous market monitoring',
+      'Real-time brand sentiment & alerts',
+      'Price optimizer with elasticity model',
       'Slack + WhatsApp notifications',
       'PDF + PowerPoint export',
       'API access: 100 calls/day',
-      'Priority processing',
+      'Priority parallel processing',
     ],
   },
   {
@@ -81,8 +82,8 @@ const FAQ = [
     a: 'A traditional FMCG consultant charges ₹2–5 lakh for a market research report that takes 4–6 weeks. ProductIQ\'s 12 AI agents do the same work in ~10 minutes for ₹999. You get a structured PDF + PPTX with scraped competitor data, real consumer reviews, trend analysis, product concepts, and a full GTM strategy.',
   },
   {
-    q: 'What data sources do the agents use?',
-    a: 'Amazon, Flipkart, Meesho (product & review data), Reddit, Twitter, Instagram (social sentiment), Google Trends (search velocity), IndiaMART/Alibaba (supplier discovery), and FSSAI/BIS/AYUSH regulation databases for the Compliance Guardian agent.',
+    q: 'What data signals do the 20 agents ingest?',
+    a: 'Our agents ingest live e-commerce listings and reviews, Google Trends velocity, social sentiment (Reddit, Instagram, X/Twitter), B2B supplier intelligence from B2B marketplaces, real-time brand mentions via Google News, competitor product launch signals, and FSSAI/BIS/AYUSH regulatory filings — all via production-grade APIs (Apify, SerpAPI). No brittle direct scraping.',
   },
   {
     q: 'Is my data private and secure?',

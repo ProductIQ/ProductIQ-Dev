@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
-import { ArrowRight, ArrowUpRight, ChevronDown, Plus, Minus } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Plus, Minus, ShoppingCart, Star, TrendingUp, MessageSquare, Factory, FileText, DollarSign, Search, Megaphone, Rocket, BarChart2, Film } from 'lucide-react'
 
 // ── Animation helpers ──────────────────────────────────────────
 const fadeUp = (delay = 0) => ({
@@ -18,41 +18,50 @@ const NAV_LINKS = [
   { label: 'Pricing', path: '/pricing' }
 ]
 
-const PLATFORMS = [
-  { name: 'Amazon', logo: 'https://www.vectorlogo.zone/logos/amazon/amazon-icon.svg' },
-  { name: 'Flipkart', logo: 'https://www.freelogovectors.net/wp-content/uploads/2025/07/flipkart-logo-icon-freelogovectors.net_.png' },
-  { name: 'Google Trends', logo: 'https://www.vectorlogo.zone/logos/google/google-icon.svg' },
-  { name: 'Reddit', logo: 'https://www.vectorlogo.zone/logos/reddit/reddit-icon.svg' },
-  { name: 'Instagram', logo: 'https://www.vectorlogo.zone/logos/instagram/instagram-icon.svg' },
-  { name: 'Nykaa', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Nykaa_New_Logo.svg/1280px-Nykaa_New_Logo.svg.png' },
-  { name: 'IndiaMart', logo: 'https://companieslogo.com/img/orig/INDIAMART.NS-ecf147e0.png?t=1720244492' },
-  { name: 'Twitter / X', logo: 'https://upload.wikimedia.org/wikipedia/commons/5/53/X_logo_2023_original.svg' },
-  { name: 'FSSAI', logo: 'https://bl-i.thgim.com/public/incoming/rtfvph/article68236678.ece/alternates/FREE_1200/IMG_BL07_fssai--logo.jpg_2_1_DP9T3BRN.jpg' },
-  { name: 'Meesho', logo: 'https://static.vecteezy.com/system/resources/previews/050/816/807/non_2x/meesho-transparent-icon-free-png.png' },
-  { name: 'JioMart', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/54/JioMart_logo.svg/3840px-JioMart_logo.svg.png' },
-  { name: 'Trade India', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/a/aa/TradeIndia.svg/1280px-TradeIndia.svg.png' },
+// Data capability categories — Lucide icons, represents what the 20 agents ingest
+const DATA_SIGNALS = [
+  { Icon: ShoppingCart, label: 'E-commerce Listings',  tag: 'Live product data' },
+  { Icon: Star,         label: 'Consumer Reviews',      tag: '10,000+ per run' },
+  { Icon: TrendingUp,   label: 'Search Trend Velocity', tag: 'Google Trends API' },
+  { Icon: MessageSquare,label: 'Social Sentiment',      tag: 'Reddit · X · Instagram' },
+  { Icon: Factory,      label: 'Supplier Intelligence', tag: 'B2B marketplaces' },
+  { Icon: FileText,     label: 'Regulatory Filings',    tag: 'FSSAI · FDA · AYUSH' },
+  { Icon: DollarSign,   label: 'Live Price Signals',    tag: 'Cross-platform pricing' },
+  { Icon: Search,       label: 'SERP Intelligence',     tag: 'SerpAPI integration' },
+  { Icon: Megaphone,    label: 'Brand Mentions',        tag: 'PR & news monitoring' },
+  { Icon: Rocket,       label: 'Product Launches',      tag: 'Competitor launches' },
+  { Icon: BarChart2,    label: 'Market Sizing Data',    tag: 'TAM · SAM · SOM' },
+  { Icon: Film,         label: 'Creator Content',       tag: 'YouTube · Reels trends' },
 ]
 
 const AGENTS = [
-  { n: '01', name: 'Market Scraper',        desc: 'Scrapes 1,000+ products from Amazon & Flipkart in real-time.' },
-  { n: '02', name: 'Review Intelligence',   desc: 'Mines and clusters 10,000+ customer reviews for sentiment.' },
-  { n: '03', name: 'Competitor Mapper',     desc: 'Maps the full competitor landscape with pricing & positioning.' },
-  { n: '04', name: 'Trend Detector',        desc: 'Tracks rising search trends across Google, Reddit & social.' },
-  { n: '05', name: 'Insight Synthesizer',   desc: 'Connects all signals into high-confidence market insights.' },
-  { n: '06', name: 'Concept Generator',     desc: 'Generates 3 validated product concepts with USP & price.' },
-  { n: '07', name: 'GTM Strategist',        desc: 'Builds a full go-to-market plan with channels & timeline.' },
-  { n: '08', name: 'Sentiment Tracker',     desc: 'Provides a daily brand health score via Supabase Realtime.' },
-  { n: '09', name: 'Price Optimizer',       desc: 'Suggests optimal price points using elasticity modeling.' },
-  { n: '10', name: 'Supply Chain Scout',    desc: 'Identifies verified manufacturers and labs for RFQs.' },
-  { n: '11', name: 'Compliance Guardian',   desc: 'Performs RAG over FSSAI, FDA, and AYUSH regulations.' },
-  { n: '12', name: 'Report Compiler',       desc: 'Produces a 30-page PDF + PPTX pitch deck automatically.' },
+  { n: '01', name: '✦Web Scraper',              desc: 'Scrapes 1,000+ product listings across e-commerce platforms via Apify.' },
+  { n: '02', name: '✦Review Miner',             desc: 'Mines and clusters 10,000+ reviews using Gemini-based sentiment analysis.' },
+  { n: '03', name: '✦Competitor Intel',         desc: 'Maps the full competitor landscape with pricing, positioning & gaps.' },
+  { n: '04', name: '✦Trend Spotter',            desc: 'Tracks rising search trends across Google Trends, Reddit & social.' },
+  { n: '05', name: '✦Insight Synthesizer',      desc: 'Connects all signals into high-confidence market insights using 1M-token context.' },
+  { n: '06', name: '✦Product Innovator',        desc: 'Generates 3 validated product concepts with USP, pricing & differentiation.' },
+  { n: '07', name: '✦GTM Strategist',           desc: 'Builds a full go-to-market plan with channels, timeline & budget.' },
+  { n: '08', name: '✦Report Builder',           desc: 'Produces a 30-page PDF + PPTX pitch deck automatically.' },
+  { n: '09', name: '✦Sentiment Tracker',        desc: 'Daily brand health score via Realtime — flags sentiment drops instantly.' },
+  { n: '10', name: '✦Price Optimizer',          desc: 'Suggests optimal price points using elasticity modeling — runs every morning.' },
+  { n: '11', name: '✦Supply Chain Scout',       desc: 'Identifies verified manufacturers and labs for RFQs. Weekly refresh.' },
+  { n: '12', name: '✦Compliance Guardian',      desc: 'Performs RAG over FSSAI, FDA, and AYUSH regulations on-demand.' },
+  { n: '13', name: '✦Social Scout',       desc: 'Extracts viral content, creator reviews, and trending hashtags from Instagram & YouTube.' },
+  { n: '14', name: '✦Market Sizer',       desc: 'Estimates TAM/SAM/SOM using Indian market data, IBEF & Statista cross-referencing.' },
+  { n: '15', name: '✦Brand Mention Tracker', desc: 'Scans Google News, Reddit & X every 4h. Alerts on PR crises and viral wins.' },
+  { n: '16', name: '✦Competitor Launch Scout', desc: 'Detects new competitor product launches every 6h and alerts you before they scale.' },
+  { n: '17', name: '✦Trend Velocity Monitor', desc: 'Re-scores top 20 trends every 2h — flags breakout trends before competitors can act.' },
+  { n: '18', name: '✦AI Chat Agent',      desc: 'RAG-powered assistant answers questions about your data, market, and competitors.' },
+  { n: '19', name: '✦Report Comparator',  desc: 'Cross-run delta: shows exactly what changed since your last intelligence run.' },
+  { n: '20', name: '✦Concept Validator',  desc: 'Validates your product hypothesis against real market data in ~90 seconds.' },
 ]
 
 const STATS = [
-  { value: '98%',    label: 'Less Expensive', sub: 'vs. traditional consultants' },
-  { value: '12',     label: 'AI Agents',      sub: 'working simultaneously' },
-  { value: '10 min', label: 'Time to Report', sub: 'not 6 weeks' },
-  { value: '8+',     label: 'Data Sources',   sub: 'scraped in parallel' },
+  { value: '98%',     label: 'Less Expensive',   sub: 'vs. traditional consultants' },
+  { value: '20',      label: 'AI Agents',         sub: 'running in parallel' },
+  { value: '<11 min', label: 'Time to Report',    sub: 'not 6 weeks' },
+  { value: '24/7',    label: 'Live Monitoring',   sub: 'continuous intelligence' },
 ]
 
 const TESTIMONIALS = [
@@ -63,7 +72,7 @@ const TESTIMONIALS = [
     initial: 'P',
   },
   {
-    quote:   'The 12-agent pipeline found a protein market gap I had completely missed. We launched 3 months later and hit ₹50L in month one.',
+    quote:   'The 20-agent pipeline found a protein market gap I had completely missed. We launched 3 months later and hit ₹50L in month one.',
     name:    'Rahul Mehta',
     company: 'CEO, FitFuel',
     initial: 'R',
@@ -73,11 +82,11 @@ const TESTIMONIALS = [
 const FAQS = [
   {
     q: 'How is this different from hiring a consulting firm?',
-    a: 'A consulting firm takes 4–6 weeks and charges ₹2–5 lakh. ProductIQ uses 12 specialised AI agents to deliver the same depth of analysis in 10 minutes for ₹999 — or free with referrals.',
+    a: 'A consulting firm takes 4–6 weeks and charges ₹2–5 lakh. ProductIQ v2 deploys 20 specialised AI agents in a parallel DAG pipeline — delivering the same depth of analysis in under 11 minutes for ₹999, with 24/7 continuous market monitoring included.',
   },
   {
     q: 'What data sources do the agents access?',
-    a: 'Amazon, Flipkart, Nykaa, Google Trends, Reddit, Instagram, IndiaMart, Trade India, and FSSAI / FDA regulatory databases. All scraped live for your report.',
+    a: 'Our agents ingest live e-commerce listings, consumer reviews, Google Trends velocity, social sentiment (Reddit, Instagram, X), B2B supplier intelligence, brand mentions from Google News, and FSSAI/FDA regulatory filings — all via production-grade APIs like Apify and SerpAPI. No brittle scraping.',
   },
   {
     q: 'Is my product data private?',
@@ -173,13 +182,12 @@ export function LandingPage() {
 
             {/* Headline — bettrlabs editorial style: bold + italic mix */}
             <motion.h1 {...fadeUp(0.06)} className="headline-mix text-[52px] lg:text-[64px] mb-6">
-              Replace <em>₹2 lakh</em>{' '}
-              consulting<br />reports with{' '}
-              <em>10 minutes.</em>
+              Your market<br />intelligence <em>OS.</em>{' '}
+              Running <em>24/7.</em>
             </motion.h1>
 
             <motion.p {...fadeUp(0.12)} className="text-[17px] text-[#6B6B6B] leading-[1.65] mb-10 max-w-md">
-              12 AI agents scrape Amazon, Reddit, Google Trends and 5 more platforms simultaneously — delivering market intelligence no consultant can match.
+              20 AI agents run in parallel — scraping, analysing, and monitoring your market continuously. Replace ₹2 lakh consulting reports with real-time intelligence that never sleeps.
             </motion.p>
 
             {/* Trust row */}
@@ -231,9 +239,9 @@ export function LandingPage() {
                 <span className="ml-3 text-[11px] font-mono text-[#444] tracking-wide">productiq — intelligence run</span>
               </div>
 
-              {/* Agent list live-running style */}
+              {/* Agent list live-running style — v2 20 agents */}
               <div className="space-y-2.5">
-                {AGENTS.slice(0, 5).map((agent, i) => (
+                {AGENTS.slice(0, 6).map((agent, i) => (
                   <motion.div
                     key={agent.n}
                     initial={{ opacity: 0, x: 12 }}
@@ -241,20 +249,20 @@ export function LandingPage() {
                     transition={{ delay: 0.3 + i * 0.09, duration: 0.4 }}
                     className="flex items-center gap-3 py-2.5 px-3 rounded-xl"
                     style={{
-                      background: i < 3 ? 'rgba(200,240,74,0.08)' : 'rgba(255,255,255,0.03)',
-                      border: `1px solid ${i < 3 ? 'rgba(200,240,74,0.15)' : 'rgba(255,255,255,0.05)'}`,
+                      background: i < 4 ? 'rgba(200,240,74,0.08)' : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${i < 4 ? 'rgba(200,240,74,0.15)' : 'rgba(255,255,255,0.05)'}`,
                     }}
                   >
                     <span className="font-mono text-[10px] text-[#555] w-5 flex-shrink-0">{agent.n}</span>
-                    <span className="text-[12px] font-medium flex-1" style={{ color: i < 3 ? '#E8FFA0' : '#666' }}>
+                    <span className="text-[12px] font-medium flex-1" style={{ color: i < 4 ? '#E8FFA0' : '#666' }}>
                       {agent.name}
                     </span>
-                    {i < 3 ? (
+                    {i < 4 ? (
                       <span className="text-[10px] flex items-center gap-1 text-[#C8F04A]">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#C8F04A] animate-pulse" />
                         Done
                       </span>
-                    ) : i === 3 ? (
+                    ) : i === 4 ? (
                       <span className="text-[10px] flex items-center gap-1 text-[#A3A3A3]">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#555] animate-pulse" />
                         Running
@@ -269,15 +277,15 @@ export function LandingPage() {
               {/* Progress bar */}
               <div className="mt-5">
                 <div className="flex justify-between mb-2">
-                  <span className="text-[10px] font-mono text-[#555]">PROGRESS</span>
-                  <span className="text-[10px] font-mono text-[#C8F04A]">42%</span>
+                  <span className="text-[10px] font-mono text-[#555]">PIPELINE PROGRESS</span>
+                  <span className="text-[10px] font-mono text-[#C8F04A]">Phase 2 / 5</span>
                 </div>
                 <div className="h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
                   <motion.div
                     className="h-full rounded-full"
                     style={{ background: '#C8F04A' }}
                     initial={{ width: '0%' }}
-                    animate={{ width: '42%' }}
+                    animate={{ width: '38%' }}
                     transition={{ duration: 1.5, ease: 'easeOut', delay: 0.8 }}
                   />
                 </div>
@@ -291,8 +299,8 @@ export function LandingPage() {
                     <div className="text-[13px] text-white font-medium">Whey Protein · India</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] text-[#555] font-mono tracking-widest uppercase mb-1">ETA</div>
-                    <div className="text-[13px] text-[#C8F04A] font-medium font-mono">~6 min</div>
+                    <div className="text-[10px] text-[#555] font-mono tracking-widest uppercase mb-1">20 Agents · ETA</div>
+                    <div className="text-[13px] text-[#C8F04A] font-medium font-mono">~10 min</div>
                   </div>
                 </div>
               </div>
@@ -301,44 +309,53 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ─────── PLATFORM MARQUEE ─────── */}
+      {/* ─────── DATA SIGNALS MARQUEE ─────── */}
       <div className="py-16 overflow-hidden relative" style={{ borderTop: '1px solid rgba(0,0,0,0.07)', borderBottom: '1px solid rgba(0,0,0,0.07)', background: '#fff' }}>
-        <div className="text-label text-center mb-10">Data Sourced From</div>
+        <div className="text-center mb-10">
+          <div className="text-label mb-2">Intelligence Signals</div>
+          <p className="text-[13px] text-[#A3A3A3]">20 agents ingest these data streams — continuously, in parallel</p>
+        </div>
         
-        {/* Row 1 */}
+        {/* Row 1 — forward scroll */}
         <div className="marquee-track mb-5">
-          {[...PLATFORMS, ...PLATFORMS, ...PLATFORMS].map((p, i) => (
-            <div key={`row1-${i}`} className="flex items-center gap-3 px-5 py-3 mx-4 rounded-2xl bg-[#F8F9FB] border border-gray-100 flex-shrink-0 shadow-sm">
-              <img 
-                src={p.logo} 
-                alt={p.name}
-                className="w-6 h-6 rounded-md object-contain bg-white"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${p.name}&background=random&color=fff&size=64`
-                }}
-              />
-              <span className="text-[14px] font-bold text-[#0A0A0A] whitespace-nowrap">
-                {p.name}
-              </span>
+          {[...DATA_SIGNALS, ...DATA_SIGNALS, ...DATA_SIGNALS].map((s, i) => (
+            <div
+              key={`row1-${i}`}
+              className="flex items-center gap-3 px-5 py-3 mx-4 rounded-2xl flex-shrink-0 shadow-sm"
+              style={{ background: '#F8F9FB', border: '1px solid rgba(0,0,0,0.06)' }}
+            >
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: '#0A0A0A' }}
+              >
+                <s.Icon size={15} color="#C8F04A" strokeWidth={1.8} />
+              </div>
+              <div>
+                <div className="text-[13px] font-bold text-[#0A0A0A] whitespace-nowrap leading-tight">{s.label}</div>
+                <div className="text-[10px] text-[#A3A3A3] whitespace-nowrap">{s.tag}</div>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* Row 2 (Reverse) */}
+        {/* Row 2 — reverse scroll */}
         <div className="marquee-track-reverse">
-          {[...[...PLATFORMS].reverse(), ...[...PLATFORMS].reverse(), ...[...PLATFORMS].reverse()].map((p, i) => (
-            <div key={`row2-${i}`} className="flex items-center gap-3 px-5 py-3 mx-4 rounded-2xl bg-[#F8F9FB] border border-gray-100 flex-shrink-0 shadow-sm">
-              <img 
-                src={p.logo} 
-                alt={p.name}
-                className="w-6 h-6 rounded-md object-contain bg-white"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${p.name}&background=random&color=fff&size=64`
-                }}
-              />
-              <span className="text-[14px] font-bold text-[#0A0A0A] whitespace-nowrap">
-                {p.name}
-              </span>
+          {[...[...DATA_SIGNALS].reverse(), ...[...DATA_SIGNALS].reverse(), ...[...DATA_SIGNALS].reverse()].map((s, i) => (
+            <div
+              key={`row2-${i}`}
+              className="flex items-center gap-3 px-5 py-3 mx-4 rounded-2xl flex-shrink-0 shadow-sm"
+              style={{ background: '#F8F9FB', border: '1px solid rgba(0,0,0,0.06)' }}
+            >
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: '#0A0A0A' }}
+              >
+                <s.Icon size={15} color="#C8F04A" strokeWidth={1.8} />
+              </div>
+              <div>
+                <div className="text-[13px] font-bold text-[#0A0A0A] whitespace-nowrap leading-tight">{s.label}</div>
+                <div className="text-[10px] text-[#A3A3A3] whitespace-nowrap">{s.tag}</div>
+              </div>
             </div>
           ))}
         </div>
@@ -360,7 +377,7 @@ export function LandingPage() {
           >
             <div className="text-label mb-4">How It Works</div>
             <h2 className="headline-mix text-[40px] lg:text-[52px] max-w-xl">
-              From a product idea to <em>full intelligence</em> — in three steps.
+              From a product idea to <em>operating system</em> — in three steps.
             </h2>
           </motion.div>
 
@@ -368,18 +385,18 @@ export function LandingPage() {
             {[
               {
                 step: '01',
-                title: 'You enter your product category.',
-                desc: 'Just a category name and optional brand. No complex setup, no briefing calls.',
+                title: 'You connect your category on Day 1.',
+                desc: 'Enter a product category and brand. ProductIQ immediately begins 24/7 monitoring — no briefing calls, no onboarding.',
               },
               {
                 step: '02',
-                title: '12 AI agents go to work simultaneously.',
-                desc: 'They scrape, mine, analyse, trend-spot, synthesize, and strategize — all in parallel.',
+                title: '20 AI agents run in a parallel pipeline.',
+                desc: 'They scrape, mine, analyse, trend-spot, synthesize, monitor, and strategize — concurrently, in under 11 minutes.',
               },
               {
                 step: '03',
-                title: 'You receive a 30-page intelligence report.',
-                desc: 'PDF + PPTX with competitive landscape, product concepts, and GTM strategy.',
+                title: 'Intelligence compounds over time.',
+                desc: 'Every new run compares to the last. Alerts fire when competitors launch, prices shift, or sentiment drops. Knowledge accumulates.',
               },
             ].map((item, i) => (
               <motion.div
@@ -445,7 +462,7 @@ export function LandingPage() {
             <div>
               <div className="text-label mb-4">The Intelligence Pipeline</div>
               <h2 className="headline-mix text-[40px] lg:text-[48px] max-w-lg">
-                12 agents. <em>One complete picture</em> of your market.
+                20 agents. <em>One operating system</em> for your market.
               </h2>
             </div>
             <button onClick={() => navigate('/reports/new')} className="btn btn-black flex-shrink-0">
@@ -569,11 +586,11 @@ export function LandingPage() {
             <h2
               className="text-[36px] md:text-[52px] font-bold leading-[1.08] tracking-tight text-white mb-6 max-w-2xl mx-auto"
             >
-              Intelligence that used to cost ₹2 lakh.{' '}
-              <span style={{ color: '#C8F04A' }}>Now ₹999.</span>
+              Your market intelligence OS.{' '}
+              <span style={{ color: '#C8F04A' }}>Always on.</span>
             </h2>
             <p className="text-[15px] text-[#888] mb-10 max-w-md mx-auto leading-[1.7]">
-              Join 500+ D2C founders who replaced expensive consultants with 12 AI agents. Your first 3 reports are free.
+              Join 500+ D2C founders who run 20 AI agents 24/7 instead of paying ₹2 lakh for a static report. Your first 3 runs are free.
             </p>
             <button onClick={() => navigate('/signup')} className="btn btn-lime btn-lg mx-auto">
               Get started — it's free <ArrowRight size={15} />
