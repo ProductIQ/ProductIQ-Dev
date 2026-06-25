@@ -13,9 +13,10 @@ from pydantic_settings import BaseSettings
 from functools import lru_cache
 from typing import Optional
 
-# Resolve .env relative to THIS file so it works from any CWD
-# (Celery workers, Docker containers, pytest — all load the same file)
-_ENV_FILE = Path(__file__).resolve().parent / ".env"
+# Resolve .env from the monorepo ROOT (two levels up from productiq-backend/config.py)
+# This is the single centralized .env for the entire project.
+# Doppler injects these vars directly as env vars in production (no .env file needed).
+_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 # Common placeholder values that should be treated as "not set"
 _PLACEHOLDER_VALUES = {

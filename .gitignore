@@ -1,4 +1,14 @@
+# ── Environment secrets — NEVER commit real .env files ────────────────────────
+# Centralized root .env (contains real secrets)
+.env
+# Legacy — backend no longer uses own .env
 productiq-backend/.env
+# Legacy — frontend no longer uses own .env
+productiq-frontend/.env
+productiq-frontend/.env.local
+productiq-frontend/.env.*.local
+# .env.example files ARE committed (they contain placeholder values, not real secrets)
+# .doppler.yaml IS committed (it only contains project name, no secrets)
 productiq-backend/venv
 
 # Logs

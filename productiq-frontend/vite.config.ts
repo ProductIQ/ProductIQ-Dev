@@ -27,6 +27,10 @@ const vendorChunks: Record<string, string[]> = {
 const hasSentryToken = !!process.env.SENTRY_AUTH_TOKEN
 
 export default defineConfig({
+  // Load VITE_* env vars from the monorepo root .env (one level up from productiq-frontend/)
+  // This is the single centralized .env shared across backend + frontend + docker.
+  // Doppler injects these directly as env vars in production — no .env file needed.
+  envDir: '../',
   plugins: [
     react(),
     // Sentry Vite plugin — uploads source maps to Sentry during build

@@ -116,13 +116,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // ── Listen for auth state changes ───────────────────────────
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+      async (event, newSession) => {
         setSession(newSession)
         setUser(toAuthUser(newSession?.user ?? null))
 
         if (newSession?.user) {
           const p = await fetchProfile(newSession.user.id)
           setProfile(p)
+
+          if (event === 'SIGNED_IN') {
+            // Track the login event
+            await supabase.from('auth_events').insert({
+              user_id: newSession.user.id,
+              event_type: 'login',
+              success: true,
+              user_agent: navigator.userAgent
+            })
+
+            // Upsert the active session
+            await supabase.from('user_sessions').upsert({
+              user_id: newSession.user.id,
+              supabase_session_id: newSession.access_token,
+              device_type: 'web',
+              user_agent: navigator.userAgent,
+              last_active_at: new Date().toISOString()
+            }, { onConflict: 'supabase_session_id' })
+          }
+
           // Set Sentry user context for error tracking
           setSentryUser({
             id: newSession.user.id,
@@ -133,6 +153,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setProfile(null)
           clearSentryUser()
+          
+          if (event === 'SIGNED_OUT') {
+            // No user in session anymore, but we can clear or track if we had old session
+          }
         }
       }
     )
@@ -179,13 +203,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     setIsLoading(true)
     addSentryBreadcrumb('auth', 'User signing out', 'info')
+    
+    // Attempt to log out event before we lose session token
+    if (session?.user) {
+       await supabase.from('auth_events').insert({
+         user_id: session.user.id,
+         event_type: 'logout',
+         success: true,
+         user_agent: navigator.userAgent
+       })
+       if (session.access_token) {
+         await supabase.from('user_sessions')
+           .update({ revoked: true, revoked_at: new Date().toISOString(), revoked_reason: 'logout' })
+           .eq('supabase_session_id', session.access_token)
+       }
+    }
+
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)
     setSession(null)
     clearSentryUser()
     setIsLoading(false)
-  }, [])
+  }, [session])
 
   const value: AuthContextValue = {
     user,

@@ -108,10 +108,14 @@ celery -A celery_app beat --loglevel=info
 ### Docker Compose (all services)
 
 ```bash
+# Ensure root .env is populated first (cp .env.example .env)
 docker compose up -d                          # Start all services
 docker compose --profile monitoring up -d     # With Flower dashboard
 docker compose logs -f api                    # View API logs
 docker compose ps                             # Check service status
+
+# With Doppler (no .env file needed):
+doppler run -- docker compose up -d
 ```
 
 ## Coding Conventions

@@ -10,10 +10,12 @@
 #   redis    — Redis (Celery broker + SSE pub/sub + rate limiting + cache)
 #
 # Usage:
-#   1. Copy productiq-backend/.env.example to productiq-backend/.env and fill in
-#   2. Copy productiq-frontend/.env.example to productiq-frontend/.env and fill in
-#   3. docker compose up -d
-#   4. Visit http://localhost
+#   1. Copy .env.example to .env at the MONOREPO ROOT and fill in values
+#   2. docker compose up -d
+#   3. Visit http://localhost
+#
+# With Doppler:
+#   doppler setup && doppler run -- docker compose up -d
 #
 # The frontend nginx proxies /api/* to the backend service.
 # No need to expose backend port directly — all traffic goes through nginx.
@@ -44,7 +46,7 @@ services:
   # ── Backend API (FastAPI + uvicorn) ─────────────────────────────────────────
   api:
     build: ./productiq-backend
-    env_file: ./productiq-backend/.env
+    env_file: ./.env   # Single centralized env at monorepo root
     depends_on:
       redis:
         condition: service_healthy
@@ -62,7 +64,7 @@ services:
   # ── Celery Worker (pipeline + monitoring) ───────────────────────────────────
   worker:
     build: ./productiq-backend
-    env_file: ./productiq-backend/.env
+    env_file: ./.env   # Single centralized env at monorepo root
     depends_on:
       redis:
         condition: service_healthy
@@ -78,7 +80,7 @@ services:
   # ── Celery Beat (scheduled tasks) ───────────────────────────────────────────
   beat:
     build: ./productiq-backend
-    env_file: ./productiq-backend/.env
+    env_file: ./.env   # Single centralized env at monorepo root
     depends_on:
       redis:
         condition: service_healthy
@@ -90,7 +92,7 @@ services:
   # ── Celery Flower (dashboard — optional) ────────────────────────────────────
   flower:
     build: ./productiq-backend
-    env_file: ./productiq-backend/.env
+    env_file: ./.env   # Single centralized env at monorepo root
     ports:
       - "5555:5555"
     depends_on:

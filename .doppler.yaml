@@ -1,0 +1,9 @@
+# Doppler project configuration
+# docs: https://docs.doppler.com/docs/cli
+#
+# Maps this monorepo directory to a Doppler project + config.
+# Run `doppler setup` once to initialize, then use `doppler run` to inject secrets.
+
+setup:
+  project: productiq
+  config: dev
