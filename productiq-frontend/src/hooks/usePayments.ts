@@ -53,7 +53,12 @@ export function usePayments() {
         },
         theme: { color: '#0A0A0A' },
         handler: async (response: Record<string, string>) => {
-          await verifyPayment({ ...response, plan })
+          await verifyPayment({
+            razorpay_order_id: response.razorpay_order_id ?? '',
+            razorpay_payment_id: response.razorpay_payment_id ?? '',
+            razorpay_signature: response.razorpay_signature ?? '',
+            plan,
+          })
           toast.success('Pro activated! Welcome to ProductIQ Pro.')
           queryClient.invalidateQueries({ queryKey: ['profile'] })
           navigate('/dashboard')

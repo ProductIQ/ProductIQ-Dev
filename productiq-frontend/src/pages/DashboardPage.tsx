@@ -8,13 +8,15 @@ import {
   FileText, Zap, Activity, ChevronRight,
   ShieldCheck, Globe2, Sparkles, ArrowLeftRight,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { useRuns } from '@/hooks/useRuns'
 import { useCountUp } from '@/hooks/useCountUp'
 import { getGreeting, formatRelativeTime } from '@/lib/utils'
-import { MOCK_RUNS } from '@/lib/api'
 import { useRealtimeSentiment } from '@/hooks/useRealtimeSentiment'
+import { getInsights } from '@/lib/api'
 import type { AgentRun } from '@/types/agent'
+import type { Insight } from '@/types/report'
 
 // ── Micro Sparkline ────────────────────────────────────────────────────────────
 function Sparkline({
@@ -132,20 +134,22 @@ function RunRow({ run }: { run: AgentRun }) {
   )
 }
 
-// ── Activity data ─────────────────────────────────────────────────────────────
-const MOCK_ACTIVITY = [
-  { time: '18m ago', tag: 'PRICE',     text: 'MuscleBlaze dropped ₹280 on Flipkart',              tagColor: '#A3A3A3' },
-  { time: '1h ago',  tag: 'INSIGHT',   text: 'Sugar-free segment is 0% of top-10 SKUs',           tagColor: '#0A0A0A' },
-  { time: '2h ago',  tag: 'SENTIMENT', text: 'Brand score +0.08 on Amazon — flavor reviews up',   tagColor: '#A3A3A3' },
-  { time: '4h ago',  tag: 'ALERT',     text: 'Mamaearth launched SPF 50+ Vitamin C Serum',        tagColor: '#0A0A0A' },
-  { time: '1d ago',  tag: 'REPORT',    text: 'Whey Protein intelligence report completed · 612s', tagColor: '#A3A3A3' },
-]
+// ── Insight type config ───────────────────────────────────────────────────────
+const INSIGHT_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
+  market_gap:            { label: 'Market Gap',       color: '#0F0F0F' },
+  consumer_need:         { label: 'Consumer Need',    color: '#22C55E' },
+  competitive_advantage: { label: 'Competitive Edge', color: '#0EA5E9' },
+  trend_opportunity:     { label: 'Trend Signal',     color: '#F59E0B' },
+  risk:                  { label: 'Risk Flag',        color: '#EF4444' },
+}
 
-const MOCK_TOP_INSIGHTS = [
-  { label: 'Market Gap', text: 'Sugar-free certified whey — 0 of 18 SKUs certified',   color: '#0F0F0F' },
-  { label: 'Trend',      text: 'Collagen-protein blends up +180% YoY on Google',        color: '#22C55E' },
-  { label: 'Risk',       text: 'FSSAI immunity claim requires clinical evidence',        color: '#A3A3A3' },
-]
+// Maps a run status to an activity-feed tag/color.
+const RUN_STATUS_TAG: Record<AgentRun['status'], { tag: string; tagColor: string }> = {
+  completed: { tag: 'REPORT',  tagColor: '#A3A3A3' },
+  running:   { tag: 'RUNNING', tagColor: '#C8F04A' },
+  queued:    { tag: 'QUEUED',  tagColor: '#F59E0B' },
+  failed:    { tag: 'ALERT',   tagColor: '#EF4444' },
+}
 
 // ── Brand Health ──────────────────────────────────────────────────────────────
 function BrandHealthCard() {
@@ -414,7 +418,13 @@ function ConceptPipelineCard() {
 }
 
 // ── Top Insights Strip ────────────────────────────────────────────────────────
-function InsightsStrip() {
+interface InsightsStripProps {
+  insights: Insight[]
+  isLoading: boolean
+  latestRunId: string | null
+}
+
+function InsightsStrip({ insights, isLoading, latestRunId }: InsightsStripProps) {
   const navigate = useNavigate()
   return (
     <div className="rounded-[20px] overflow-hidden" style={{ background: '#0F0F0F', border: '1px solid rgba(255,255,255,0.07)' }}>
@@ -423,57 +433,97 @@ function InsightsStrip() {
         <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Latest Agent Insights</span>
       </div>
       <div className="flex overflow-x-auto scrollbar-none divide-x divide-white/[0.06]">
-        {MOCK_TOP_INSIGHTS.map((ins, i) => (
-          <div key={i} className="flex items-start gap-3 px-6 py-4 flex-shrink-0 min-w-[240px]">
-            <span className="w-0.5 h-full min-h-[36px] rounded-full flex-shrink-0 mt-0.5" style={{ background: ins.color }} />
-            <div>
-              <span className="text-[9px] font-bold uppercase tracking-wider block mb-0.5 text-white/30">{ins.label}</span>
-              <p className="text-[12px] font-medium text-white/80 leading-snug">{ins.text}</p>
-            </div>
+        {isLoading ? (
+          <div className="flex items-center px-6 py-4 w-full">
+            <span className="text-[12px] font-medium text-white/40">Loading insights…</span>
           </div>
-        ))}
-        <div className="flex items-center px-6 flex-shrink-0">
-          <button
-            onClick={() => navigate('/reports/mock-run-001')}
-            className="text-[11px] font-semibold text-[#C8F04A] flex items-center gap-1 hover:gap-2 transition-all whitespace-nowrap"
-          >
-            Full report <ArrowRight size={12} />
-          </button>
-        </div>
+        ) : insights.length === 0 ? (
+          <div className="flex items-center px-6 py-4 w-full">
+            <span className="text-[12px] font-medium text-white/40">No insights yet. Run a report to generate market insights.</span>
+          </div>
+        ) : (
+          insights.map((ins, i) => {
+            const cfg = INSIGHT_TYPE_CONFIG[ins.insight_type] ?? { label: ins.insight_type, color: '#A3A3A3' }
+            return (
+              <div key={ins.id ?? i} className="flex items-start gap-3 px-6 py-4 flex-shrink-0 min-w-[240px]">
+                <span className="w-0.5 h-full min-h-[36px] rounded-full flex-shrink-0 mt-0.5" style={{ background: cfg.color }} />
+                <div>
+                  <span className="text-[9px] font-bold uppercase tracking-wider block mb-0.5 text-white/30">{cfg.label}</span>
+                  <p className="text-[12px] font-medium text-white/80 leading-snug">{ins.title}</p>
+                </div>
+              </div>
+            )
+          })
+        )}
+        {insights.length > 0 && latestRunId && (
+          <div className="flex items-center px-6 flex-shrink-0">
+            <button
+              onClick={() => navigate(`/reports/${latestRunId}`)}
+              className="text-[11px] font-semibold text-[#C8F04A] flex items-center gap-1 hover:gap-2 transition-all whitespace-nowrap"
+            >
+              Full report <ArrowRight size={12} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
 // ── Activity Feed ──────────────────────────────────────────────────────────────
-function ActivityFeedCard({ fill = false }: { fill?: boolean }) {
+function ActivityFeedCard({ runs, fill = false }: { runs: AgentRun[]; fill?: boolean }) {
+  const activity = runs.slice(0, 8).map(run => {
+    const cfg = RUN_STATUS_TAG[run.status] ?? RUN_STATUS_TAG.queued
+    const label = run.brand_name
+      ? `${run.product_category} · ${run.brand_name}`
+      : run.product_category
+    const text = run.status === 'completed'
+      ? `${label} intelligence report completed`
+      : run.status === 'failed'
+        ? `${label} report failed${run.error_message ? ` — ${run.error_message}` : ''}`
+        : `${label} report ${run.status}`
+    return { time: formatRelativeTime(run.created_at), tag: cfg.tag, text, tagColor: cfg.tagColor }
+  })
+
   return (
     <div className={`bg-white rounded-[20px] overflow-hidden border border-[rgba(0,0,0,0.07)] flex flex-col${fill ? ' h-full' : ''}`}>
       <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(0,0,0,0.05)] flex-shrink-0">
         <h3 className="text-[11px] font-bold text-[#0A0A0A] uppercase tracking-[0.1em]">Activity</h3>
       </div>
       <div className="divide-y divide-[rgba(0,0,0,0.04)] flex-1 overflow-y-auto">
-        {MOCK_ACTIVITY.map((item, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, x: -4 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.06 * i }}
-            className="flex items-start gap-4 px-6 py-4 hover:bg-[#FAFAFA] transition-colors"
-          >
-            <div className="w-0.5 self-stretch rounded-full flex-shrink-0 mt-0.5" style={{ background: item.tagColor + '60' }} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-2 mb-0.5">
-                <span className="text-[9px] font-bold uppercase tracking-[0.1em]" style={{ color: item.tagColor }}>
-                  {item.tag}
-                </span>
-                <span className="font-mono text-[10px] text-[#C8C8C8]">·</span>
-                <span className="font-mono text-[10px] text-[#A3A3A3]">{item.time}</span>
+        {activity.length > 0 ? (
+          activity.map((item, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.06 * i }}
+              className="flex items-start gap-4 px-6 py-4 hover:bg-[#FAFAFA] transition-colors"
+            >
+              <div className="w-0.5 self-stretch rounded-full flex-shrink-0 mt-0.5" style={{ background: item.tagColor + '60' }} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2 mb-0.5">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.1em]" style={{ color: item.tagColor }}>
+                    {item.tag}
+                  </span>
+                  <span className="font-mono text-[10px] text-[#C8C8C8]">·</span>
+                  <span className="font-mono text-[10px] text-[#A3A3A3]">{item.time}</span>
+                </div>
+                <p className="text-[12.5px] text-[#0A0A0A] leading-snug">{item.text}</p>
               </div>
-              <p className="text-[12.5px] text-[#0A0A0A] leading-snug">{item.text}</p>
+            </motion.div>
+          ))
+        ) : (
+          <div className="py-16 text-center">
+            <div className="w-14 h-14 rounded-[18px] bg-[#F8F9FB] border border-[rgba(0,0,0,0.07)] flex items-center justify-center mx-auto mb-5">
+              <Activity size={20} className="text-[#A3A3A3]" />
             </div>
-          </motion.div>
-        ))}
+            <p className="text-[14px] font-semibold text-[#0A0A0A] mb-1.5">No activity yet</p>
+            <p className="text-[13px] text-[#6B6B6B] max-w-[220px] mx-auto leading-relaxed">
+              Run a report to start tracking market intelligence activity.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -517,8 +567,16 @@ function ComplianceCard() {
 export function DashboardPage() {
   const navigate          = useNavigate()
   const { user, profile } = useAuth()
-  const { data: runs = MOCK_RUNS } = useRuns()
+  const { data: runs = [] } = useRuns()
   const [copied, setCopied] = useState(false)
+
+  // Most recent completed run — used to fetch top insights.
+  const latestCompletedRun = runs.find(r => r.status === 'completed') ?? null
+  const { data: insights = [], isLoading: insightsLoading } = useQuery({
+    queryKey: ['insights', latestCompletedRun?.id],
+    queryFn:  () => getInsights(latestCompletedRun!.id) as Promise<Insight[]>,
+    enabled:  !!latestCompletedRun,
+  })
 
   const firstName = user?.user_metadata?.full_name?.split(' ')[0] ?? 'there'
   const usagePct  = profile ? (profile.reports_used_this_month / profile.reports_limit) * 100 : 33
@@ -603,7 +661,7 @@ export function DashboardPage() {
 
       {/* ══ Insights Strip ══ */}
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
-        <InsightsStrip />
+        <InsightsStrip insights={insights} isLoading={insightsLoading} latestRunId={latestCompletedRun?.id ?? null} />
       </motion.div>
 
       {/* ══ Main Body: 2-col + right sidebar ══ */}
@@ -677,7 +735,7 @@ export function DashboardPage() {
 
           {/* Activity Feed — grows to fill remaining col height */}
           <div className="flex-1 min-h-0">
-            <ActivityFeedCard fill />
+            <ActivityFeedCard runs={runs} fill />
           </div>
         </motion.div>
 

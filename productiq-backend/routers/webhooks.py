@@ -24,19 +24,35 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
     - payment.captured     → mark transaction paid
     - payment.failed       → mark transaction failed
     - subscription.charged → auto-renew handling
+
+    Security: signature is ALWAYS required. Requests without the
+    x-razorpay-signature header are rejected to prevent forged webhooks.
     """
     body = await request.body()
 
-    # Verify webhook signature
-    if x_razorpay_signature and settings.RAZORPAY_KEY_SECRET:
-        expected = hmac.new(
-            settings.RAZORPAY_KEY_SECRET.encode(),
-            body,
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(expected, x_razorpay_signature):
-            logger.warning("Invalid Razorpay webhook signature")
-            raise HTTPException(status_code=400, detail="Invalid webhook signature")
+    # ── Signature verification (mandatory) ────────────────────────────────────
+    if not settings.RAZORPAY_KEY_SECRET:
+        logger.error("Razorpay webhook received but RAZORPAY_KEY_SECRET not configured")
+        raise HTTPException(
+            status_code=503,
+            detail="Webhook verification not configured (RAZORPAY_KEY_SECRET missing).",
+        )
+
+    if not x_razorpay_signature:
+        logger.warning("Razorpay webhook rejected — missing x-razorpay-signature header")
+        raise HTTPException(
+            status_code=401,
+            detail="Missing x-razorpay-signature header. Unsigned webhooks are not accepted.",
+        )
+
+    expected = hmac.new(
+        settings.RAZORPAY_KEY_SECRET.encode(),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected, x_razorpay_signature):
+        logger.warning("Invalid Razorpay webhook signature")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
     try:
         payload = json.loads(body)

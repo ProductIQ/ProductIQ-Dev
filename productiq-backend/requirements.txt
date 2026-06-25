@@ -1,74 +1,73 @@
-## ProductIQ Backend — Python Requirements
+## ProductIQ Backend — Python Requirements (pinned for reproducible builds)
 ## Install: pip install -r requirements.txt
 
 # ── Core API Framework ───────────────────────────────────────────────────────
-fastapi
-uvicorn[standard]
-sse-starlette
-pydantic
-pydantic-settings
-python-multipart
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sse-starlette==2.2.1
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.20
 
 # ── Database & Supabase ──────────────────────────────────────────────────────
-supabase
-psycopg2-binary
-sqlalchemy
-asyncpg
+supabase==2.10.0
+psycopg2-binary==2.9.10
+sqlalchemy==2.0.36
+asyncpg==0.30.0
 
 # ── Celery & Redis ───────────────────────────────────────────────────────────
-celery[redis]
-redis
-flower
+celery[redis]==5.4.0
+redis==5.2.1
+flower==2.0.1
 
 # ── CrewAI & LLM ─────────────────────────────────────────────────────────────
-crewai
-crewai-tools
-google-generativeai
+crewai==0.86.0
+crewai-tools==0.25.0
+google-generativeai==0.8.3
 
 # ── LlamaIndex RAG Stack ──────────────────────────────────────────────────────
-llama-index
-llama-index-core
-llama-index-llms-gemini
-llama-index-embeddings-gemini
-llama-index-vector-stores-supabase
+llama-index==0.12.11
+llama-index-core==0.12.11
+llama-index-llms-gemini==0.4.3
+llama-index-embeddings-gemini==0.3.1
+llama-index-vector-stores-supabase==0.4.1
 
 # ── Web Scraping ─────────────────────────────────────────────────────────────
-httpx
-httpx[http2]
-beautifulsoup4
-lxml
-fake-useragent
-playwright
-apify-client
+httpx==0.28.1
+beautifulsoup4==4.12.3
+lxml==5.3.0
+fake-useragent==2.0.3
+playwright==1.49.1
+apify-client==1.9.0
 
 # ── NLP & ML ─────────────────────────────────────────────────────────────────
-spacy
-vaderSentiment
-bertopic
-scipy
-numpy
-scikit-learn
+spacy==3.8.2
+vaderSentiment==3.3.2
+bertopic==0.16.2
+scipy==1.14.1
+numpy==2.2.1
+scikit-learn==1.6.0
 
 # ── Search APIs ───────────────────────────────────────────────────────────────
-google-search-results
-pytrends
-praw
+google-search-results==2.4.2
+pytrends==4.9.2
+praw==7.8.1
 
 # ── Report Generation ─────────────────────────────────────────────────────────
-weasyprint
-python-pptx
-jinja2
+weasyprint==63.1
+python-pptx==1.0.2
+jinja2==3.1.5
 
 # ── Payments ──────────────────────────────────────────────────────────────────
-razorpay
+razorpay==1.4.2
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
-posthog
+posthog==3.12.0
 
 # ── Observability & Logging ───────────────────────────────────────────────────
-structlog
+structlog==24.4.0
+sentry-sdk[fastapi]==2.19.2
 
 # ── Dev/Testing ───────────────────────────────────────────────────────────────
-pytest
-pytest-asyncio
-httpx
+pytest==8.3.4
+pytest-asyncio==0.25.0

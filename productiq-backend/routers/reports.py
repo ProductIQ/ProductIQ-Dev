@@ -25,12 +25,62 @@ from models import RunRequest, RunResponse
 from database import get_supabase
 from analytics import track_event
 from config import settings
+from rate_limit import rate_limit
 
 logger = structlog.get_logger()
 router = APIRouter()
 
 # Threadpool for running synchronous CrewAI in BackgroundTasks without blocking event loop
 _crew_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="crewai")
+
+
+# ── Usage accounting ──────────────────────────────────────────────────────────
+
+def _increment_usage(user_id: str) -> None:
+    """Increment the user's monthly report usage by 1. Called on pipeline SUCCESS."""
+    try:
+        db = get_supabase()
+        # Atomic increment — avoids read-then-write race condition
+        db.rpc("increment_monthly_reports", {"p_user_id": user_id}).execute()
+    except Exception:
+        # Fallback: read-then-write if the RPC is not defined
+        try:
+            db = get_supabase()
+            profile = (
+                db.table("profiles")
+                .select("reports_used_this_month")
+                .eq("id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            )
+            current = (profile or {}).get("reports_used_this_month", 0)
+            db.table("profiles").update({
+                "reports_used_this_month": current + 1,
+            }).eq("id", user_id).execute()
+        except Exception as exc:
+            logger.error("Failed to increment usage", user=user_id, error=str(exc))
+
+
+def _refund_usage(user_id: str) -> None:
+    """Decrement the user's monthly report usage by 1. Called on pipeline FAILURE."""
+    try:
+        db = get_supabase()
+        profile = (
+            db.table("profiles")
+            .select("reports_used_this_month")
+            .eq("id", user_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+        current = (profile or {}).get("reports_used_this_month", 0)
+        if current > 0:
+            db.table("profiles").update({
+                "reports_used_this_month": current - 1,
+            }).eq("id", user_id).execute()
+    except Exception as exc:
+        logger.error("Failed to refund usage", user=user_id, error=str(exc))
 
 
 # ── Auth dependency ───────────────────────────────────────────────────────────
@@ -140,12 +190,16 @@ def _run_crew_in_thread(
             pass
 
         logger.info("Background crew finished", run_id=run_id)
+        # Increment usage only on successful completion (B2 fix)
+        _increment_usage(user_id)
         return result
 
     except Exception as exc:
         import json
         error_str = str(exc)[:300]
         logger.error("Background crew failed", run_id=run_id, error=error_str)
+        # Refund the usage credit on failure so users don't lose credits (B2 fix)
+        _refund_usage(user_id)
         try:
             fail_payload = json.dumps({
                 "type": "run_failed",
@@ -164,6 +218,7 @@ async def start_run(
     req: RunRequest,
     background_tasks: BackgroundTasks,
     user=Depends(get_current_user),
+    _: None = Depends(rate_limit(max_requests=5, window_seconds=3600, key_prefix="rl_report")),
 ):
     db = get_supabase()
 
@@ -239,14 +294,12 @@ async def start_run(
             # Fall through to BackgroundTasks below
 
     if not settings.USE_CELERY or celery_task_id is None:
-        # Development / fallback mode: run in background thread
-        # Wrap the thread execution in a standard function so it doesn't fail
-        # on asyncio.get_event_loop() inside a lambda
-        def run_sync_in_pool():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_in_executor(
-                _crew_executor,
+        # Development / fallback mode: run crew in the threadpool executor.
+        # FastAPI BackgroundTasks runs this synchronously in a worker thread,
+        # and _run_crew_in_thread submits the CPU-bound CrewAI work to the
+        # dedicated _crew_executor so it doesn't block the BackgroundTask thread.
+        def _dispatch_to_executor():
+            future = _crew_executor.submit(
                 _run_crew_in_thread,
                 req.product_category,
                 brand,
@@ -254,14 +307,20 @@ async def start_run(
                 str(user.id),
                 is_watermarked,
             )
+            # Block until the crew finishes so errors are logged, not swallowed.
+            try:
+                future.result()
+            except Exception as exc:
+                logger.error("Crew executor future failed",
+                             run_id=run_id, error=str(exc)[:300])
 
-        background_tasks.add_task(run_sync_in_pool)
+        background_tasks.add_task(_dispatch_to_executor)
         logger.info("Pipeline queued in BackgroundTasks", run_id=run_id)
 
-    # ── Increment monthly usage ───────────────────────────────────────────────
-    db.table("profiles").update({
-        "reports_used_this_month": profile["reports_used_this_month"] + 1,
-    }).eq("id", user.id).execute()
+    # ── Usage accounting ──────────────────────────────────────────────────────
+    # NOTE: Usage is incremented on SUCCESS and refunded on FAILURE inside the
+    # pipeline execution (see _increment_usage / _refund_usage above).
+    # We do NOT increment here to avoid charging users for failed runs (B2 fix).
 
     track_event(str(user.id), "report_started", {
         "category": req.product_category,

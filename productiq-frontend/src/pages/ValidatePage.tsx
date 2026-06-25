@@ -6,10 +6,9 @@ import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, ChevronRight } from 'lucide-react'
-import {
-  MOCK_VALIDATION_RESULT,
-  type ValidationResult,
-} from '@/lib/mockData'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { validateConcept, getValidationHistory } from '@/lib/api'
+import { type ValidationResult } from '@/lib/mockData'
 
 // ── Progress bar — simple, B&W ───────────────────────────────────────────────
 function Bar({ pct, label }: { pct: number; label?: string }) {
@@ -262,11 +261,45 @@ export function ValidatePage() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
 
+  // ── Real API: validate concept ──────────────────────────────────
+  const validateMutation = useMutation({
+    mutationFn: (payload: {
+      concept_name: string
+      description: string
+      target_market?: string
+      run_id?: string
+    }) => validateConcept(payload),
+  })
+
+  // ── Real API: validation history ────────────────────────────────
+  const { data: history } = useQuery({
+    queryKey: ['validationHistory'],
+    queryFn: getValidationHistory,
+  })
+
+  // Transition to results once the API call succeeds
+  useEffect(() => {
+    if (validateMutation.isSuccess) setStage('results')
+  }, [validateMutation.isSuccess])
+
+  // Return to form on error so the user can retry
+  useEffect(() => {
+    if (validateMutation.isError) setStage('form')
+  }, [validateMutation.isError])
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     setCName(form.name || 'Unnamed concept')
+    validateMutation.mutate({
+      concept_name: form.name,
+      description: form.description,
+      target_market: form.target || undefined,
+      run_id: form.runRef || undefined,
+    })
     setStage('running')
   }
+
+  const result = validateMutation.data?.result as ValidationResult | undefined
 
   return (
     <div className="max-w-[760px] mx-auto pb-12">
@@ -282,7 +315,10 @@ export function ValidatePage() {
         </motion.div>
         {stage !== 'form' && (
           <button
-            onClick={() => setStage('form')}
+            onClick={() => {
+              validateMutation.reset()
+              setStage('form')
+            }}
             className="btn btn-outline btn-sm"
           >
             New concept
@@ -378,6 +414,48 @@ export function ValidatePage() {
                 </p>
               </div>
             </form>
+
+            {/* Error banner */}
+            {validateMutation.isError && (
+              <div className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] px-5 py-4 mt-4">
+                <p className="text-[13px] text-[#0A0A0A]">
+                  Couldn’t validate concept. {validateMutation.error instanceof Error ? validateMutation.error.message : 'Please try again.'}
+                </p>
+              </div>
+            )}
+
+            {/* Empty state — shown before any validation has been run */}
+            {!validateMutation.data && !validateMutation.isError && (!history || history.length === 0) && (
+              <div className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] px-5 py-8 text-center mt-4">
+                <p className="text-[13px] text-[#A3A3A3]">Enter a product concept above to validate it against market data.</p>
+              </div>
+            )}
+
+            {/* Validation history */}
+            {history && history.length > 0 && (
+              <div className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] overflow-hidden mt-4">
+                <div className="px-5 py-3.5 border-b border-[rgba(0,0,0,0.05)]">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#A3A3A3]">Recent validations</p>
+                </div>
+                <div className="px-5 py-4 divide-y divide-[rgba(0,0,0,0.04)]">
+                  {history.map((v: Record<string, unknown>, i: number) => (
+                    <div key={(v.id as string) ?? i} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
+                      <div>
+                        <p className="text-[13px] font-semibold text-[#0A0A0A]">
+                          {(v.concept_name as string) ?? (v.conceptName as string) ?? '—'}
+                        </p>
+                        <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+                          {v.created_at ? new Date(v.created_at as string).toLocaleDateString() : ''}
+                        </p>
+                      </div>
+                      <p className="text-[20px] font-bold text-[#0A0A0A]">
+                        {(v.score as number) ?? (v.overall_score as number) ?? '—'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -389,14 +467,14 @@ export function ValidatePage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
           >
-            <ValidationProgress onDone={() => setStage('results')} />
+            <ValidationProgress onDone={() => {}} />
           </motion.div>
         )}
 
         {/* Results */}
-        {stage === 'results' && (
+        {stage === 'results' && result && (
           <motion.div key="results">
-            <Results result={MOCK_VALIDATION_RESULT} conceptName={conceptName} />
+            <Results result={result} conceptName={conceptName} />
           </motion.div>
         )}
       </AnimatePresence>

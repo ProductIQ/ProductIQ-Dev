@@ -14,6 +14,12 @@ from contextlib import asynccontextmanager
 
 from config import settings
 from routers import reports, stream, products, payments, webhooks, sentiment, graph, profile
+from routers import v2 as v2_router
+from routers import admin as admin_router
+
+# ── Sentry initialization (must happen before app creation) ───────────────────
+from sentry_init import init_sentry as _init_sentry
+_sentry_enabled = _init_sentry()
 
 logger = structlog.get_logger()
 
@@ -25,7 +31,8 @@ async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle hooks."""
     # Print full configuration summary so we immediately know what's wired up
     cfg = settings.log_configuration_summary()
-    logger.info("ProductIQ API starting", **cfg, supabase_url=settings.SUPABASE_URL[:40])
+    logger.info("ProductIQ API starting", **cfg, supabase_url=settings.SUPABASE_URL[:40],
+                sentry_enabled=_sentry_enabled)
 
     # Warn about missing critical config
     if not settings.apify_configured:
@@ -143,6 +150,8 @@ app.include_router(payments.router,  prefix="/api/payments",  tags=["payments"])
 app.include_router(webhooks.router,  prefix="/api/webhooks",  tags=["webhooks"])
 app.include_router(sentiment.router, prefix="/api/sentiment", tags=["sentiment"])
 app.include_router(graph.router,     prefix="/api/graph",     tags=["graph"])
+app.include_router(v2_router.router, prefix="/api/v2",        tags=["v2"])
+app.include_router(admin_router.router, prefix="/api/admin",   tags=["admin"])
 
 
 # ── Global exception handler ──────────────────────────────────────────────────
@@ -158,6 +167,10 @@ async def global_exception_handler(request: Request, exc: Exception):
         error=str(exc),
         exc_type=type(exc).__name__,
     )
+    # Capture in Sentry (if enabled)
+    if _sentry_enabled:
+        import sentry_sdk
+        sentry_sdk.capture_exception(exc)
     return JSONResponse(
         status_code=500,
         content={
@@ -176,6 +189,7 @@ async def health():
     return {
         "status": "ok",
         "version": "2.0.0",
+        "sentry_enabled": _sentry_enabled,
         **settings.log_configuration_summary(),
     }
 
@@ -230,3 +244,23 @@ async def root():
         "docs": "/docs",
         "health": "/health",
     }
+
+
+# ── Observability endpoints (D6) ──────────────────────────────────────────────
+
+@app.get("/health/llm-usage", tags=["health", "observability"], summary="LLM usage summary")
+async def llm_usage_summary(date: str = None):
+    """Get aggregated LLM token usage and latency metrics for a given date.
+    Defaults to today. Useful for cost monitoring and debugging."""
+    from observability import get_usage_summary
+    return get_usage_summary(date)
+
+
+@app.get("/health/run-llm-calls/{run_id}", tags=["health", "observability"],
+         summary="LLM calls for a specific run")
+async def run_llm_calls(run_id: str):
+    """Get all LLM calls made during a specific pipeline run.
+    Useful for debugging agent performance and token costs."""
+    from observability import get_run_llm_calls
+    calls = get_run_llm_calls(run_id)
+    return {"run_id": run_id, "total_calls": len(calls), "calls": calls}

@@ -31,6 +31,39 @@ def _publish_event(run_id: str, event_data: dict) -> None:
         logger.warning("Redis SSE publish failed", run_id=run_id, error=str(exc))
 
 
+def _push_notification(
+    user_id: str,
+    title: str,
+    body: str = "",
+    notif_type: str = "info",
+    category: str = "system",
+    link: str = "",
+) -> None:
+    """
+    Insert a notification into the notifications table.
+    This triggers a Supabase Realtime event that the frontend receives
+    via the useRealtimeNotifications() hook, showing a toast + updating
+    the unread badge instantly.
+
+    Best-effort: if the DB insert fails, the notification is simply
+    not delivered (the DB is the source of truth, not notifications).
+    """
+    try:
+        from database import get_supabase
+        db = get_supabase()
+        db.table("notifications").insert({
+            "user_id": user_id,
+            "type": notif_type,
+            "category": category,
+            "title": title,
+            "body": body or None,
+            "link": link or None,
+        }).execute()
+    except Exception as exc:
+        logger.warning("Failed to push notification",
+                       user_id=user_id, title=title, error=str(exc))
+
+
 # ── Main Pipeline Task ────────────────────────────────────────────────────────
 
 @app.task(
@@ -58,6 +91,16 @@ def run_pipeline_task(
     from crews.main_crew import run_main_crew
     from analytics import track_event
     import time
+
+    # Add Sentry breadcrumb for task tracing
+    try:
+        from sentry_init import add_breadcrumb, set_user_context
+        add_breadcrumb("celery", f"Pipeline task started: {run_id}", data={
+            "run_id": run_id, "category": product_category, "brand": brand_name,
+        })
+        set_user_context(user_id=user_id)
+    except Exception:
+        pass
 
     start_time = time.time()
 
@@ -91,6 +134,26 @@ def run_pipeline_task(
             "run_id": run_id,
         })
 
+        # Increment usage only on successful completion (B2 fix)
+        try:
+            from database import get_supabase
+            db = get_supabase()
+            profile = (
+                db.table("profiles")
+                .select("reports_used_this_month")
+                .eq("id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            )
+            current = (profile or {}).get("reports_used_this_month", 0)
+            db.table("profiles").update({
+                "reports_used_this_month": current + 1,
+            }).eq("id", user_id).execute()
+        except Exception as usage_err:
+            logger.warning("Failed to increment usage after success",
+                           run_id=run_id, error=str(usage_err))
+
         # Fetch report URLs from DB and push completion event
         try:
             from database import get_supabase
@@ -119,11 +182,43 @@ def run_pipeline_task(
             })
 
         logger.info("Pipeline task finished", run_id=run_id, duration=duration)
+
+        # ── Push a notification (triggers Supabase Realtime → frontend toast) ──
+        _push_notification(
+            user_id=user_id,
+            title=f"Report completed: {product_category} Intelligence",
+            body=f"Your analysis for {product_category} is ready to view.",
+            notif_type="success",
+            category="report",
+            link=f"/reports/{run_id}",
+        )
+
         return result
 
     except Exception as exc:
         error_str = str(exc)[:300]
         logger.error("Pipeline task failed", run_id=run_id, error=error_str)
+
+        # Refund usage credit on failure so users don't lose credits (B2 fix)
+        try:
+            from database import get_supabase
+            db = get_supabase()
+            profile = (
+                db.table("profiles")
+                .select("reports_used_this_month")
+                .eq("id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            )
+            current = (profile or {}).get("reports_used_this_month", 0)
+            if current > 0:
+                db.table("profiles").update({
+                    "reports_used_this_month": current - 1,
+                }).eq("id", user_id).execute()
+        except Exception as refund_err:
+            logger.warning("Failed to refund usage after failure",
+                           run_id=run_id, error=str(refund_err))
 
         try:
             track_event(user_id, "report_failed", {
@@ -139,6 +234,17 @@ def run_pipeline_task(
             "run_id": run_id,
             "error": error_str,
         })
+
+        # ── Push failure notification ──
+        _push_notification(
+            user_id=user_id,
+            title=f"Report failed: {product_category}",
+            body=f"The analysis could not be completed. Your report credit has been refunded.",
+            notif_type="error",
+            category="report",
+            link=f"/reports/{run_id}/status",
+        )
+
         raise
 
 

@@ -49,7 +49,11 @@ cp .env.example .env
 ```
 
 ### 3. Database Setup
-Run `migrations/001_initial_schema.sql` in Supabase Dashboard → SQL Editor.
+Run all SQL migrations in order in Supabase Dashboard → SQL Editor:
+1. `supabase/migrations/001_initial_schema.sql` — Core tables + RLS
+2. `supabase/migrations/002_v2_features.sql` — V2 tables (notifications, intel, brands, chat)
+3. `supabase/migrations/003_realtime_publication.sql` — Enable Supabase Realtime
+4. `supabase/migrations/004_admin_panel.sql` — Admin role + audit log
 
 ### 4. Seed Compliance Knowledge Base (Agent 12)
 ```bash
@@ -102,8 +106,33 @@ Services:
 | GET | `/api/profile/` | User profile |
 | PATCH | `/api/profile/` | Update profile |
 | POST | `/api/webhooks/razorpay` | Payment webhooks |
+| GET | `/api/v2/notifications` | Get user notifications |
+| PATCH | `/api/v2/notifications/{id}/read` | Mark notification as read |
+| PATCH | `/api/v2/notifications/read-all` | Mark all as read |
+| GET | `/api/v2/notifications/unread-count` | Unread count for badge |
+| GET | `/api/v2/intelligence/events` | Intelligence event feed |
+| GET | `/api/v2/intelligence/brands` | Tracked brands for filter |
+| GET | `/api/v2/brands` | List brand profiles |
+| POST | `/api/v2/brands` | Create brand profile |
+| DELETE | `/api/v2/brands/{id}` | Delete brand profile |
+| GET | `/api/v2/chat/sessions` | List chat sessions |
+| POST | `/api/v2/chat/sessions` | Create chat session |
+| POST | `/api/v2/chat/sessions/{id}/messages` | Send chat message |
+| POST | `/api/v2/validate` | Validate product concept |
+| GET | `/api/v2/validate/history` | Validation history |
+| GET | `/api/v2/compare/{run1}/{run2}` | Compare two runs |
+| GET | `/api/admin/stats` | Platform overview stats (admin) |
+| GET | `/api/admin/users` | List all users (admin) |
+| PATCH | `/api/admin/users/{id}/plan` | Change user plan (admin) |
+| PATCH | `/api/admin/users/{id}/role` | Change user role (admin) |
+| GET | `/api/admin/health` | System health metrics (admin) |
+| GET | `/api/admin/revenue` | Revenue analytics (admin) |
+| GET | `/api/admin/runs` | Run analytics (admin) |
+| GET | `/api/admin/audit-log` | Admin audit log (admin) |
+| GET | `/health` | Liveness probe |
+| GET | `/health/db` | Database connectivity check |
 
-Full docs at `/docs` (Swagger UI).
+Full interactive docs at `/docs` (Swagger UI) and `/redoc` (ReDoc).
 
 ## Real-Time Architecture
 
@@ -132,13 +161,15 @@ Browser ──SSE──► /api/stream/{run_id}
 
 - **Python** 3.11
 - **FastAPI** 0.115 + **uvicorn**
-- **CrewAI** 0.63 + **crewai-tools**
+- **CrewAI** 0.86 + **crewai-tools**
 - **Google Gemini** (via `google-generativeai`)
 - **Supabase** (Postgres + pgvector + Realtime + Storage Auth)
-- **LlamaIndex** 0.10 with Gemini embeddings
+- **LlamaIndex** 0.12 with Gemini embeddings
 - **Celery** 5.4 + **Redis** 7
 - **WeasyPrint** (PDF) + **python-pptx** (PowerPoint)
 - **BERTopic** + **VADER** + **spaCy** (NLP)
 - **Playwright** (JS rendering)
 - **Razorpay** (payments)
 - **PostHog** (analytics)
+- **Sentry** (error tracking + performance monitoring)
+- **structlog** (structured logging)

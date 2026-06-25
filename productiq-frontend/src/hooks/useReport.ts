@@ -1,7 +1,9 @@
 // src/hooks/useReport.ts
+// Fetches full report data (run + insights + clusters + competitors + trends + concepts + gtm)
+// via the FastAPI backend instead of direct Supabase queries.
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
-import type { Insight, Competitor, Trend, ProductConcept, GTMPlan, ReviewCluster } from '@/types/report'
+import { getRun, getInsights, getConcepts, getGtm, getClusters, getCompetitors } from '@/lib/api'
+import type { Insight, Competitor, ProductConcept, GTMPlan, ReviewCluster } from '@/types/report'
 
 export interface ReportData {
   run: {
@@ -13,34 +15,53 @@ export interface ReportData {
     created_at: string
     duration_seconds: number | null
   } | null
+  report: {
+    id: string
+    run_id: string
+    title: string
+    pdf_url: string | null
+    pptx_url: string | null
+    is_watermarked: boolean
+    page_count: number | null
+    created_at: string
+  } | null
   insights: Insight[]
   clusters: ReviewCluster[]
   competitors: Competitor[]
-  trends: Trend[]
+  trends: unknown[]
   concepts: ProductConcept[]
   gtmPlans: GTMPlan[]
 }
 
 async function fetchReport(runId: string): Promise<ReportData> {
-  const [runRes, insightsRes, clustersRes, competitorsRes, trendsRes, conceptsRes, gtmRes] =
-    await Promise.all([
-      supabase.from('agent_runs').select('*').eq('id', runId).single(),
-      supabase.from('insights').select('*').eq('run_id', runId).order('confidence_score', { ascending: false }),
-      supabase.from('review_clusters').select('*').eq('run_id', runId),
-      supabase.from('competitors').select('*').eq('run_id', runId),
-      supabase.from('trends').select('*').eq('run_id', runId).order('trend_score', { ascending: false }),
-      supabase.from('product_concepts').select('*').eq('run_id', runId),
-      supabase.from('gtm_plans').select('*').eq('run_id', runId),
-    ])
+  const [runData, insights, concepts, gtmPlans, clusters, competitors] = await Promise.all([
+    getRun(runId),
+    getInsights(runId).catch(() => []),
+    getConcepts(runId).catch(() => []),
+    getGtm(runId).catch(() => []),
+    getClusters(runId).catch(() => []),
+    getCompetitors(runId).catch(() => []),
+  ])
 
   return {
-    run: runRes.data ?? null,
-    insights: (insightsRes.data ?? []) as Insight[],
-    clusters: (clustersRes.data ?? []) as ReviewCluster[],
-    competitors: (competitorsRes.data ?? []) as Competitor[],
-    trends: (trendsRes.data ?? []) as Trend[],
-    concepts: (conceptsRes.data ?? []) as ProductConcept[],
-    gtmPlans: (gtmRes.data ?? []) as GTMPlan[],
+    run: runData.run
+      ? {
+          id: runData.run.id,
+          product_category: runData.run.product_category,
+          brand_name: runData.run.brand_name,
+          target_market: runData.run.target_market,
+          status: runData.run.status,
+          created_at: runData.run.created_at,
+          duration_seconds: null,
+        }
+      : null,
+    report: runData.report ?? null,
+    insights: insights as Insight[],
+    clusters: clusters as ReviewCluster[],
+    competitors: competitors as Competitor[],
+    trends: [],
+    concepts: concepts as ProductConcept[],
+    gtmPlans: gtmPlans as GTMPlan[],
   }
 }
 

@@ -36,6 +36,16 @@ def get_current_user(authorization: str = Header(..., description="Bearer <Supab
         response = db.auth.get_user(token)
         if not response or not response.user:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
+        # Set Sentry user context for error tracking
+        try:
+            from sentry_init import set_user_context
+            set_user_context(
+                user_id=str(response.user.id),
+                email=response.user.email,
+                username=response.user.user_metadata.get("full_name") if response.user.user_metadata else None,
+            )
+        except Exception:
+            pass  # Sentry not configured — non-critical
         return response.user
     except Exception as exc:
         logger.warning("JWT validation failed", error=str(exc)[:100])
@@ -74,5 +84,31 @@ def require_plan(plan: str):
                 status_code=403,
                 detail=f"This feature requires a {plan.capitalize()} plan or higher. "
                        f"Upgrade at the pricing page.",
+            )
+    return _check
+
+
+def require_admin():
+    """
+    Dependency that checks the authenticated user has the 'admin' role.
+    Use alongside get_current_user:
+
+        @router.get("/admin/stats")
+        async def admin_stats(user=Depends(get_current_user), _=Depends(require_admin())):
+    """
+    def _check(user=None):
+        db = get_supabase()
+        profile = (
+            db.table("profiles")
+            .select("role")
+            .eq("id", str(user.id))
+            .maybe_single()
+            .execute()
+            .data
+        )
+        if not profile or profile.get("role") != "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Admin access required.",
             )
     return _check

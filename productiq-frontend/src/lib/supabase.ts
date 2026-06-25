@@ -1,53 +1,30 @@
 // src/lib/supabase.ts
-// ════════════════════════════════════════════════════════════════
-// MOCK SUPABASE CLIENT — swap for real client when Supabase is ready
-// ════════════════════════════════════════════════════════════════
+// Real Supabase client — reads URL + anon key from Vite env vars.
+// The anon key is safe to expose to the browser (RLS protects data).
+// The backend uses the service_role key server-side; the frontend must
+// NEVER have the service_role key.
 
-export const MOCK_MODE = true
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-// Stub for Supabase type compatibility when real client is added
-export const supabase = {
-  auth: {
-    getSession: async () => ({ data: { session: null }, error: null }),
-    onAuthStateChange: (_callback: (event: string, session: unknown) => void) => ({
-      data: { subscription: { unsubscribe: () => {} } },
-    }),
-    signInWithPassword: async (_opts: { email: string; password: string }) => ({
-      data: { user: null, session: null },
-      error: null,
-    }),
-    signUp: async (_opts: { email: string; password: string; options?: unknown }) => ({
-      data: { user: null, session: null },
-      error: null,
-    }),
-    signOut: async () => ({ error: null }),
-  },
-  from: (_table: string) => ({
-    select: (_cols: string) => ({
-      eq: (_col: string, _val: unknown) => ({
-        data: [] as never[],
-        error: null,
-        then: (cb: (v: { data: never[]; error: null }) => unknown) =>
-          Promise.resolve({ data: [] as never[], error: null }).then(cb),
-        single: async () => ({ data: null, error: null }),
-        limit: (_n: number) => Promise.resolve({ data: [] as never[], error: null }),
-        order: (_col: string, _opts?: unknown) => Promise.resolve({ data: [] as never[], error: null }),
-      }),
-      order: (_col: string, _opts?: unknown) => ({
-        data: [] as never[],
-        error: null,
-        then: (cb: (v: { data: never[]; error: null }) => unknown) =>
-          Promise.resolve({ data: [] as never[], error: null }).then(cb),
-      }),
-    }),
-    insert: (_rows: unknown) => Promise.resolve({ data: null, error: null }),
-    update: (_rows: unknown) => ({
-      eq: (_col: string, _val: unknown) => Promise.resolve({ data: null, error: null }),
-    }),
-  }),
-  channel: (_name: string) => ({
-    on: (_event: string, _opts: unknown, _callback: unknown) => ({
-      subscribe: (_cb?: unknown) => ({ unsubscribe: () => {} }),
-    }),
-  }),
-} as const
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[supabase] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is not set. ' +
+      'Auth and direct DB queries will fail. Copy .env.example to .env and fill in values.'
+  )
+}
+
+export const supabase: SupabaseClient = createClient<never, never>(
+  supabaseUrl ?? 'https://placeholder.supabase.co',
+  supabaseAnonKey ?? 'placeholder-anon-key',
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  }
+)

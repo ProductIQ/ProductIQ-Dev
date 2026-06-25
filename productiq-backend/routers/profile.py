@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from database import get_supabase
 from models import UpdateProfileRequest, ReferralRequest, ReferralResponse
 from analytics import identify_user, track_event
+from cache import cache_get, cache_set, cache_delete
 import structlog
 
 logger = structlog.get_logger()
@@ -26,6 +27,12 @@ def get_current_user(authorization: str = Header(...)):
 
 @router.get("/", summary="Get authenticated user's profile")
 async def get_profile(user=Depends(get_current_user)):
+    # D5: Check Redis cache first (5 min TTL)
+    cache_key = f"profile:{user.id}"
+    cached = cache_get(cache_key)
+    if cached:
+        return {"profile": cached, "cached": True}
+
     db = get_supabase()
     profile = db.table("profiles").select("*").eq("id", str(user.id)).maybe_single().execute().data
 
@@ -40,6 +47,9 @@ async def get_profile(user=Depends(get_current_user)):
             "extra_reports_from_referrals": 0,
         }
         db.table("profiles").insert(profile).execute()
+
+    # Cache the profile
+    cache_set(cache_key, profile, ttl=300)
 
     return {"profile": profile}
 
@@ -58,6 +68,9 @@ async def update_profile(req: UpdateProfileRequest, user=Depends(get_current_use
     result = db.table("profiles").update(updates).eq("id", str(user.id)).execute()
 
     if result.data:
+        # D5: Invalidate cache on update
+        cache_delete(f"profile:{user.id}")
+
         identify_user(str(user.id), {
             "company": req.company_name,
             "name": req.full_name,

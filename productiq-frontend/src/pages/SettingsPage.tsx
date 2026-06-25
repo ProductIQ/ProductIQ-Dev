@@ -1,7 +1,11 @@
 // src/pages/SettingsPage.tsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { useAuth } from '@/hooks/useAuth'
+import { useProfile, useUpdateProfile } from '@/hooks/useProfile'
+import { getPaymentHistory } from '@/lib/api'
+import type { Transaction } from '@/types/user'
 import {
   User, Bell, CreditCard, Check, Copy, Eye, EyeOff,
   Lock, AlertTriangle, MessageSquare, Link2, ChevronRight, Receipt,
@@ -47,14 +51,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   )
 }
 
-// ── Mock transactions ─────────────────────────────────────────────
-const TRANSACTIONS = [
-  { date: '1 Apr 2026',  amount: '₹4,999', plan: 'Pro Monthly',  status: 'paid'   },
-  { date: '1 Mar 2026',  amount: '₹4,999', plan: 'Pro Monthly',  status: 'paid'   },
-  { date: '1 Feb 2026',  amount: '₹999',   plan: 'Pay-per-Report', status: 'paid' },
-  { date: '15 Jan 2026', amount: '₹999',   plan: 'Pay-per-Report', status: 'failed' },
-]
-
+// ── Tabs config ───────────────────────────────────────────────────
 const SETTINGS_TABS = [
   { id: 'profile',       label: 'Profile' },
   { id: 'notifications', label: 'Notifications' },
@@ -63,19 +60,33 @@ const SETTINGS_TABS = [
 ]
 
 // ── Sub-panels ────────────────────────────────────────────────────
-function ProfileTab({ user, profile }: { user: any; profile: any }) {
+function ProfileTab({ user }: { user: any; profile?: any }) {
+  const { profile } = useProfile()
+  const updateProfile = useUpdateProfile()
   const name = user?.user_metadata?.full_name ?? profile?.full_name ?? 'User'
   const company = user?.user_metadata?.company_name ?? profile?.company_name ?? ''
   const email = user?.email ?? profile?.email ?? ''
   const avatarColor = getAvatarColor(name)
-  const [saving, setSaving] = useState(false)
+  const [fullName, setFullName] = useState(name)
+  const [companyName, setCompanyName] = useState(company)
   const [showDelete, setShowDelete] = useState(false)
 
+  // Keep local form state in sync once profile loads
+  useEffect(() => {
+    setFullName(name)
+    setCompanyName(company)
+  }, [name, company])
+
   async function handleSave() {
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 800))
-    setSaving(false)
-    toast.success('Profile saved!')
+    try {
+      await updateProfile.mutateAsync({
+        full_name: fullName,
+        company_name: companyName,
+      })
+      toast.success('Profile saved!')
+    } catch {
+      toast.error('Could not save profile. Please try again.')
+    }
   }
 
   return (
@@ -108,19 +119,24 @@ function ProfileTab({ user, profile }: { user: any; profile: any }) {
           <User size={15} className="text-[#A3A3A3]" /> Profile Details
         </h2>
         <div className="grid md:grid-cols-2 gap-5">
-          {[
-            { label: 'Full name', defaultValue: name, type: 'text' },
-            { label: 'Company name', defaultValue: company, type: 'text' },
-          ].map(f => (
-            <div key={f.label}>
-              <label className="block text-[11px] font-semibold text-[#A3A3A3] uppercase tracking-wider mb-2">{f.label}</label>
-              <input
-                type={f.type}
-                defaultValue={f.defaultValue}
-                className="input text-[14px]"
-              />
-            </div>
-          ))}
+          <div>
+            <label className="block text-[11px] font-semibold text-[#A3A3A3] uppercase tracking-wider mb-2">Full name</label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={e => setFullName(e.target.value)}
+              className="input text-[14px]"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-[#A3A3A3] uppercase tracking-wider mb-2">Company name</label>
+            <input
+              type="text"
+              value={companyName}
+              onChange={e => setCompanyName(e.target.value)}
+              className="input text-[14px]"
+            />
+          </div>
 
           {/* Email (disabled) */}
           <div>
@@ -153,10 +169,10 @@ function ProfileTab({ user, profile }: { user: any; profile: any }) {
         <div className="flex justify-end mt-6">
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={updateProfile.isPending}
             className="btn btn-black btn-sm min-w-[120px]"
           >
-            {saving ? 'Saving…' : 'Save changes'}
+            {updateProfile.isPending ? 'Saving…' : 'Save changes'}
           </button>
         </div>
       </div>
@@ -316,6 +332,13 @@ function BillingTab({ profile }: { profile: any }) {
   const referralCode = profile?.referral_code ?? 'PRODUCT2024'
   const referralUrl  = `https://productiq.in/signup?ref=${referralCode}`
 
+  const { data: paymentHistory, isLoading: txLoading } = useQuery<{ transactions: Transaction[]; total: number }>({
+    queryKey: ['payment-history'],
+    queryFn: () => getPaymentHistory() as Promise<{ transactions: Transaction[]; total: number }>,
+    staleTime: 60_000,
+  })
+  const transactions = paymentHistory?.transactions ?? []
+
   async function copyReferral() {
     await navigator.clipboard.writeText(referralUrl).catch(() => {})
     setCopied(true)
@@ -416,25 +439,43 @@ function BillingTab({ profile }: { profile: any }) {
             </tr>
           </thead>
           <tbody>
-            {TRANSACTIONS.map((tx, i) => (
-              <tr key={i} className="border-b last:border-0 border-[rgba(0,0,0,0.04)] hover:bg-[#F8F9FB] transition-colors">
-                <td className="px-6 py-3 text-[13px] text-[#6B6B6B]">{tx.date}</td>
-                <td className="px-6 py-3 text-[13px] font-mono font-semibold text-[#0A0A0A]">{tx.amount}</td>
-                <td className="px-6 py-3 text-[13px] text-[#6B6B6B]">{tx.plan}</td>
-                <td className="px-6 py-3">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                    tx.status === 'paid'   ? 'bg-[#dcfce7] text-[#16A34A]' :
-                    tx.status === 'failed' ? 'bg-[#fee2e2] text-[#EF4444]' :
-                    'bg-[rgba(0,0,0,0.07)] text-[#A3A3A3]'
-                  }`}>{tx.status}</span>
-                </td>
-                <td className="px-6 py-3">
-                  <button className="w-7 h-7 rounded-lg border border-[rgba(0,0,0,0.1)] flex items-center justify-center hover:bg-[#F0F2F5] transition-colors" title="Download PDF">
-                    <Receipt size={12} className="text-[#A3A3A3]" />
-                  </button>
+            {txLoading ? (
+              <tr className="border-b last:border-0 border-[rgba(0,0,0,0.04)]">
+                <td colSpan={5} className="px-6 py-8 text-center text-[13px] text-[#A3A3A3]">
+                  Loading transactions…
                 </td>
               </tr>
-            ))}
+            ) : transactions.length === 0 ? (
+              <tr className="border-b last:border-0 border-[rgba(0,0,0,0.04)]">
+                <td colSpan={5} className="px-6 py-8 text-center text-[13px] text-[#A3A3A3]">
+                  No transactions yet. Your payment history will appear here after you upgrade.
+                </td>
+              </tr>
+            ) : (
+              transactions.map((tx, i) => (
+                <tr key={tx.id ?? i} className="border-b last:border-0 border-[rgba(0,0,0,0.04)] hover:bg-[#F8F9FB] transition-colors">
+                  <td className="px-6 py-3 text-[13px] text-[#6B6B6B]">
+                    {tx.created_at ? new Date(tx.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                  </td>
+                  <td className="px-6 py-3 text-[13px] font-mono font-semibold text-[#0A0A0A]">
+                    {tx.amount_paise != null ? `₹${(tx.amount_paise / 100).toLocaleString('en-IN')}` : '—'}
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#6B6B6B]">{tx.plan ?? tx.type ?? '—'}</td>
+                  <td className="px-6 py-3">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                      tx.status === 'paid'   ? 'bg-[#dcfce7] text-[#16A34A]' :
+                      tx.status === 'failed' ? 'bg-[#fee2e2] text-[#EF4444]' :
+                      'bg-[rgba(0,0,0,0.07)] text-[#A3A3A3]'
+                    }`}>{tx.status}</span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <button className="w-7 h-7 rounded-lg border border-[rgba(0,0,0,0.1)] flex items-center justify-center hover:bg-[#F0F2F5] transition-colors" title="Download PDF">
+                      <Receipt size={12} className="text-[#A3A3A3]" />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

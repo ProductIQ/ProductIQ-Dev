@@ -7,9 +7,11 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Settings2, Play, TrendingUp, TrendingDown,
-  ArrowRight, ChevronRight, X, Check,
+  ArrowRight, ChevronRight, X, Check, Loader2, Trash2,
 } from 'lucide-react'
-import { MOCK_BRANDS, type BrandProfile } from '@/lib/mockData'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { type BrandProfile } from '@/lib/mockData'
+import { getBrands, createBrand, deleteBrand } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 // ── Mini sparkline — same as Dashboard ──────────────────────────────────────
@@ -48,7 +50,7 @@ function HealthScore({ score, delta }: { score: number; delta: number }) {
 }
 
 // ── Brand card — styled like RunRow but as a card ────────────────────────────
-function BrandCard({ brand, onEdit }: { brand: BrandProfile; onEdit: (b: BrandProfile) => void }) {
+function BrandCard({ brand, onEdit, onDelete }: { brand: BrandProfile; onEdit: (b: BrandProfile) => void; onDelete: (id: string) => void }) {
   const navigate = useNavigate()
   const trendColor = brand.healthScore > 0.6 ? '#22C55E' : brand.healthScore > 0.3 ? '#F59E0B' : '#EF4444'
 
@@ -164,6 +166,13 @@ function BrandCard({ brand, onEdit }: { brand: BrandProfile; onEdit: (b: BrandPr
           className="btn btn-outline btn-sm flex items-center gap-1.5"
         >
           <Settings2 size={11} /> Configure
+        </button>
+        <button
+          onClick={() => onDelete(brand.id)}
+          className="btn btn-outline btn-sm flex items-center gap-1.5"
+          title="Delete brand"
+        >
+          <Trash2 size={11} />
         </button>
       </div>
     </motion.div>
@@ -335,29 +344,43 @@ function ConfigModal({ brand, onClose }: { brand: BrandProfile; onClose: () => v
 
 // ── Main page ────────────────────────────────────────────────────────────────
 export function BrandsPage() {
-  const [brands, setBrands]       = useState<BrandProfile[]>(MOCK_BRANDS)
+  const queryClient = useQueryClient()
   const [showAdd, setShowAdd]     = useState(false)
   const [editBrand, setEditBrand] = useState<BrandProfile | null>(null)
 
+  // ── Fetch brands ──
+  const { data: brands = [], isLoading } = useQuery<BrandProfile[]>({
+    queryKey: ['brands'],
+    queryFn: () => getBrands(),
+  })
+
+  // ── Create brand ──
+  const createMutation = useMutation({
+    mutationFn: (payload: { brand_name: string; category: string; target_market?: string }) =>
+      createBrand(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['brands'] })
+    },
+  })
+
+  // ── Delete brand ──
+  const deleteMutation = useMutation({
+    mutationFn: (brandId: string) => deleteBrand(brandId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['brands'] })
+    },
+  })
+
   const addBrand = (partial: Partial<BrandProfile>) => {
-    setBrands(prev => [{
-      id: `brand-${Date.now()}`,
-      brandName: partial.brandName ?? 'New Brand',
-      productCategory: partial.productCategory ?? '',
-      targetMarket: partial.targetMarket ?? 'India',
-      monitoringEnabled: true,
-      trackingSince: new Date().toISOString(),
-      lastFullRunAt: '',
-      healthScore: 0.5,
-      healthDelta: 0,
-      sentimentTrend: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-      priceTrend: [500, 500, 500, 500, 500, 500, 500],
-      competitors: Array.isArray(partial.competitors) ? partial.competitors : [],
-      alertThresholds: { sentimentDrop: 10, priceChange: 8, mentionSpike: 50 },
-      plan: 'starter',
-      totalRuns: 0,
-      totalInsights: 0,
-    }, ...prev])
+    createMutation.mutate({
+      brand_name: partial.brandName ?? 'New Brand',
+      category: partial.productCategory ?? '',
+      target_market: partial.targetMarket,
+    })
+  }
+
+  const removeBrand = (brandId: string) => {
+    deleteMutation.mutate(brandId)
   }
 
   const active = brands.filter(b => b.monitoringEnabled).length
@@ -412,44 +435,66 @@ export function BrandsPage() {
       </motion.div>
 
       {/* ── Brand cards grid ── */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.1 }}
-        className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"
-      >
-        <AnimatePresence>
-          {brands.map((brand, i) => (
-            <motion.div
-              key={brand.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.97 }}
-              transition={{ delay: i * 0.05 }}
-            >
-              <BrandCard brand={brand} onEdit={setEditBrand} />
-            </motion.div>
-          ))}
-
-          {/* Add placeholder */}
-          <motion.button
-            key="add-btn"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: brands.length * 0.05 }}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 size={20} className="animate-spin text-[#A3A3A3]" />
+        </div>
+      ) : brands.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-[20px] border border-[rgba(0,0,0,0.07)] py-20 text-center"
+        >
+          <p className="text-[15px] font-semibold text-[#0A0A0A] mb-1.5">No brands tracked yet</p>
+          <p className="text-[13px] text-[#A3A3A3] mb-5">Add a brand to start monitoring its market intelligence.</p>
+          <button
             onClick={() => setShowAdd(true)}
-            className="bg-white rounded-[20px] border border-dashed border-[rgba(0,0,0,0.12)] flex flex-col items-center justify-center min-h-[240px] gap-2.5 group hover:border-[rgba(0,0,0,0.3)] transition-all"
+            className="btn btn-black inline-flex items-center gap-2"
           >
-            <div className="w-9 h-9 rounded-[12px] bg-[#F0F2F5] group-hover:bg-[#0F0F0F] flex items-center justify-center transition-all">
-              <Plus size={16} className="text-[#A3A3A3] group-hover:text-[#C8F04A] transition-all" />
-            </div>
-            <div className="text-center">
-              <p className="text-[13px] font-semibold text-[#6B6B6B] group-hover:text-[#0A0A0A] transition-colors">Add a brand</p>
-              <p className="text-[11px] text-[#A3A3A3] mt-0.5">Start monitoring in 2 steps</p>
-            </div>
-          </motion.button>
-        </AnimatePresence>
-      </motion.div>
+            <Plus size={14} /> Add brand
+          </button>
+        </motion.div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"
+        >
+          <AnimatePresence>
+            {brands.map((brand, i) => (
+              <motion.div
+                key={brand.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97 }}
+                transition={{ delay: i * 0.05 }}
+              >
+                <BrandCard brand={brand} onEdit={setEditBrand} onDelete={removeBrand} />
+              </motion.div>
+            ))}
+
+            {/* Add placeholder */}
+            <motion.button
+              key="add-btn"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: brands.length * 0.05 }}
+              onClick={() => setShowAdd(true)}
+              className="bg-white rounded-[20px] border border-dashed border-[rgba(0,0,0,0.12)] flex flex-col items-center justify-center min-h-[240px] gap-2.5 group hover:border-[rgba(0,0,0,0.3)] transition-all"
+            >
+              <div className="w-9 h-9 rounded-[12px] bg-[#F0F2F5] group-hover:bg-[#0F0F0F] flex items-center justify-center transition-all">
+                <Plus size={16} className="text-[#A3A3A3] group-hover:text-[#C8F04A] transition-all" />
+              </div>
+              <div className="text-center">
+                <p className="text-[13px] font-semibold text-[#6B6B6B] group-hover:text-[#0A0A0A] transition-colors">Add a brand</p>
+                <p className="text-[11px] text-[#A3A3A3] mt-0.5">Start monitoring in 2 steps</p>
+              </div>
+            </motion.button>
+          </AnimatePresence>
+        </motion.div>
+      )}
 
       <AnimatePresence>
         {showAdd && <AddBrandModal onClose={() => setShowAdd(false)} onAdd={addBrand} />}

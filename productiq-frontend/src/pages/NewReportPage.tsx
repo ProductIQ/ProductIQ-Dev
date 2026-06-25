@@ -12,10 +12,10 @@ import {
   BarChart3, FileText, Zap, Globe2, ShieldCheck, Brain,
 } from 'lucide-react'
 import { useStartRun } from '@/hooks/useRuns'
+import { useRuns } from '@/hooks/useRuns'
 import { useAuth } from '@/hooks/useAuth'
 import { AGENT_DEFINITIONS } from '@/types/agent'
 import { useNavigate } from 'react-router-dom'
-import { MOCK_RUNS } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
 
 const schema = z.object({
@@ -185,7 +185,8 @@ function DataSourcesStrip() {
 // ── Recent runs mini-list ─────────────────────────────────────────────────────
 function RecentRunsSidebar() {
   const navigate = useNavigate()
-  const recent   = MOCK_RUNS.slice(0, 4)
+  const { data: runs = [] } = useRuns()
+  const recent   = (runs ?? []).slice(0, 4)
   return (
     <div className="bg-white rounded-[20px] overflow-hidden border border-[rgba(0,0,0,0.07)]">
       <div className="px-5 py-3.5 border-b border-[rgba(0,0,0,0.05)]">
